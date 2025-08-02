@@ -1,3 +1,5 @@
+#include "./include/uapi/plant.h"
+
 #include <string.h>
 
 #include <nd/nd.h>
@@ -23,11 +25,6 @@ typedef struct {
 	unsigned plid;
 	unsigned size;
 } PLA;
-
-struct plant_data {
-	unsigned id[3];
-	unsigned char n, max;
-};
 
 enum base_plant {
 	PLANT_PINUS_SILVESTRIS,
@@ -118,7 +115,7 @@ static inline void
 _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 {
 	register int i, n;
-	struct plant_data pd = * (struct plant_data *) bio->raw;
+	plant_tile_t pd = * (plant_tile_t *) bio->raw;
 
         for (i = 0; i < 3; i++, v >>= 4) {
                 n = PLANT_N(pd.n, i);
@@ -130,7 +127,7 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 		PLA *pplant = (PLA *) &plant.data;
 		pplant->plid = pd.id[i];
 		pplant->size = n;
-		object_add(&plant, pd.id[i], where_ref, v);
+		object_add(&plant, pd.id[i], where_ref, v, 0);
         }
 }
 
@@ -139,10 +136,10 @@ on_spawn(unsigned player_ref __attribute__((unused)),
 		unsigned where_ref, struct bio bio,
 		uint64_t v __attribute__((unused)))
 {
-	struct plant_data pd = * (struct plant_data *) bio.raw;
+	plant_tile_t pd = * (plant_tile_t *) bio.raw;
 	/* &bio->pd, bio->ty, */
 	/* bio->tmp, bio->rn); */
-	/* struct plant_data epd; */
+	/* plant_tile_t epd; */
 
         if (pd.n)
                 _plants_add(where_ref, &bio, v);
@@ -185,12 +182,16 @@ int on_add(unsigned ref, unsigned type, uint64_t v)
 	return 0;
 }
 
-struct icon on_icon(struct icon i, unsigned ref, unsigned type) {
+struct icon on_icon(unsigned ref, unsigned type,
+		unsigned player_ref __attribute__((unused)))
+{
 	OBJ obj;
 	SKEL skel;
 	PLA *pla = (PLA *) &obj.data;
 	SPLA *spla = (SPLA *) &skel.data;
+	struct icon i;
 
+	sic_last(&i);
 	if (type != type_plant)
 		return i;
 
@@ -230,7 +231,7 @@ plant_noise(unsigned *plid, coord_t tmp, ucoord_t rn, uint32_t v, unsigned plant
 }
 
 static inline void
-plants_noise(struct plant_data *pd, uint32_t ty, coord_t tmp, ucoord_t rn, unsigned n)
+plants_noise(plant_tile_t *pd, uint32_t ty, coord_t tmp, ucoord_t rn, unsigned n)
 {
 	uint32_t v = ty;
 	register int cpln;
@@ -262,7 +263,7 @@ plants_noise(struct plant_data *pd, uint32_t ty, coord_t tmp, ucoord_t rn, unsig
 }
 
 static void
-plants_shuffle(struct plant_data *pd, morton_t v)
+plants_shuffle(plant_tile_t *pd, morton_t v)
 {
         unsigned char apln[3] = {
                 pd->n & 3,
@@ -291,7 +292,7 @@ plants_shuffle(struct plant_data *pd, morton_t v)
 }
 
 struct bio on_noise(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t cl __attribute__((unused))) {
-	struct plant_data pd;
+	plant_tile_t pd;
 	pd.max = 0;
 	if (he > w) {
 		r.ty = XXH32(&tm, sizeof(uint32_t), PLANTS_SEED);
@@ -308,7 +309,7 @@ struct bio on_noise(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t
 
 sic_str_t on_empty_tile(view_tile_t t, unsigned side, sic_str_t ss) {
 	char *b = ss.str;
-	struct plant_data pd = * (struct plant_data *) t.raw;
+	plant_tile_t pd = * (plant_tile_t *) t.raw;
 
 	if (PLANT_N(pd.n, side)) {
 		SKEL skel;
@@ -329,17 +330,16 @@ sic_str_t on_empty_tile(view_tile_t t, unsigned side, sic_str_t ss) {
 	return ss;
 }
 
-void mod_open(void *arg __attribute__((unused))) {
-	type_plant = nd_put(HD_TYPE, NULL, "plant");
-
+void mod_open(void) {
 	act_chop = action_register("chop", "🪓");
 }
 
-void mod_install(void *arg) {
+void mod_install(void) {
 	unsigned consumable_type, other_type;
 
-	mod_open(arg);
+	mod_open();
 
+	type_plant = nd_put(HD_TYPE, NULL, "plant");
 	memcpy(&carrot.data, &carrot_con, sizeof(carrot_con));
 	memcpy(&tomato.data, &tomato_con, sizeof(tomato_con));
 
@@ -352,10 +352,13 @@ void mod_install(void *arg) {
 	tomato_drop.skel = nd_put(HD_SKEL, NULL, &tomato);
 	unsigned tomato_drop_ref = nd_put(HD_DROP, NULL, &tomato_drop);
 
-	nd_get(HD_RTYPE, &other_type, "other");
-	stick.type = other_type;
-	stick_drop.skel = nd_put(HD_SKEL, NULL, &stick);
-	unsigned stick_drop_ref = nd_put(HD_DROP, NULL, &stick_drop);
+	unsigned stick_drop_ref = NOTHING;
+	if (!nd_get(HD_RTYPE, &other_type, "other")) {
+		stick.type = other_type;
+		stick.max_art = 14;
+		stick_drop.skel = nd_put(HD_SKEL, NULL, &stick);
+		stick_drop_ref = nd_put(HD_DROP, NULL, &stick_drop);
+	}
 
 	plant_skel_add("pinus sylvestris", 19, GREEN, BOLD, 'x', 'X', 30, 70, 50, 1024, 4, stick_drop_ref);
 	plant_skel_add("pseudotsuga menziesii", 21, GREEN, BOLD, 't', 'T', 32, 100, 180, 350, 1, stick_drop_ref);
