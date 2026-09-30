@@ -1,0 +1,1 @@
+CFLAGS-libnd-plant-o := -fPIC

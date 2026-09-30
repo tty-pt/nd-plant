@@ -1,0 +1,2 @@
+PROJECT_NAME           = "nd-plant"
+@INCLUDE = ../mk/Doxyfile
