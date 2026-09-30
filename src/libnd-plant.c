@@ -1,9 +1,38 @@
-#include "./include/uapi/plant.h"
+/* src/libnd-plant.c — nd-plant, ported to libxylem.
+ *
+ * Owns plants: the ten tree/crop species, their skeletons and drops, map
+ * generation (noise, spawn, shuffle), and the carrot/tomato consumables that
+ * feed nd-drink.
+ *
+ * Original: tty-pt/nd-plant @ 373 lines main.c, from the nd-basics
+ * superproject.
+ *
+ * This TU XY_IMPLs on_spawn, on_examine, on_add, on_noise and on_empty_tile.
+ * It implements no named service from another module's header, so it needs no
+ * *_IMPL guard; plant_tile_t comes from its own nd/plant.h (pure type, no
+ * XY_DECL) and consumable_skel_t from nd/drink.h.
+ *
+ * on_icon does not exist here anymore. nd-plant amends icons through nd-core's
+ * decorator table (core_icon_decorate), because XY cannot observe a
+ * co-implemented chain; see <nd/core.h> and MODS.md §7.
+ *
+ * XXH32 for the noise hash. The old module got this from <nd/nd.h>, which is
+ * gone; nothing in nd/ exposes it. <xxhash.h> is self-contained for XXH32 (no
+ * -lxxhash needed), and the call is unchanged -- the same arrangement
+ * nd-stone uses.
+ */
+
+#include <ttypt/xy-mod.h>
+
+#include <nd/xy.h>
 
 #include <string.h>
 
-#include <nd/nd.h>
+#include <xxhash.h>
+
+#include <nd/plant.h>
 #include <nd/drink.h>
+#include <nd/core.h>
 
 #define PLANT_EXTRA 4
 #define PLANT_MASK 0x3
@@ -40,42 +69,48 @@ enum base_plant {
 	PLANT_MAX,
 };
 
-unsigned type_plant, act_chop;
-unsigned plant_refs[PLANT_MAX];
-unsigned gen_plant_n = 0;
+static unsigned type_plant, act_chop;
+static unsigned plant_refs[PLANT_MAX];
+static unsigned gen_plant_n = 0;
 
-SKEL carrot = {
+static SKEL carrot = {
         .name = "carrot",
         .type = 0, // type later
 };
 
-consumable_skel_t carrot_con = { .food = 3 };
+static consumable_skel_t carrot_con = { .food = 3 };
 
-DROP carrot_drop = {
+static DROP carrot_drop = {
         .y = 0,
 };
 
-SKEL stick = {
+static SKEL stick = {
         .name = "stick",
 	.max_art = 14,
 };
 
-DROP stick_drop = {
+static DROP stick_drop = {
         .y = 0,
         .yield = 1,
         .yield_v = 0x3,
 };
 
-SKEL tomato = {
+static SKEL tomato = {
         .name = "tomato",
         .type = 0, // type later
 };
 
-consumable_skel_t tomato_con = { .food = 4 };
+static consumable_skel_t tomato_con = { .food = 4 };
 
-DROP tomato_drop = {
+static DROP tomato_drop = {
         .y = 3,
 };
+
+/* API. XY_IMPL both defines the function and emits the dispatch adapter, so
+ * each name gets exactly one, with its body -- no forward declarations.
+ *
+ * Order matters below: XY_IMPL emits a definition, so a caller has to come
+ * after its callee. plant_skel_add leads because xy_install calls it. */
 
 static inline unsigned plant_skel_add(
 		const char *name, unsigned max_art, unsigned fg, unsigned pi_flags,
@@ -100,7 +135,7 @@ static inline unsigned plant_skel_add(
 	memcpy((char *) skel.name, name, sizeof(skel.name));
 	memcpy(skel.data, &spla, sizeof(spla));
 
-	id = nd_put(HD_SKEL, NULL, &skel);
+	id = (unsigned)nd_put(HD_SKEL, NULL, &skel);
 	if (drop != NOTHING)
 		nd_put(HD_ADROP, &id, &drop);
 
@@ -127,15 +162,16 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 		PLA *pplant = (PLA *) &plant.data;
 		pplant->plid = pd.id[i];
 		pplant->size = n;
-		object_add(&plant, pd.id[i], where_ref, v, 0);
+		object_add(&plant, pd.id[i], where_ref, v);
         }
 }
 
-int
-on_spawn(unsigned player_ref __attribute__((unused)),
-		unsigned where_ref, struct bio bio,
-		uint64_t v __attribute__((unused)))
+XY_IMPL(int, on_spawn, unsigned, player_ref,
+		unsigned, where_ref, struct bio, bio,
+		uint64_t, v)
 {
+	(void) player_ref;
+	(void) v;
 	plant_tile_t pd = * (plant_tile_t *) bio.raw;
 	/* &bio->pd, bio->ty, */
 	/* bio->tmp, bio->rn); */
@@ -151,7 +187,8 @@ on_spawn(unsigned player_ref __attribute__((unused)),
 	return 0;
 }
 
-int on_examine(unsigned player_ref, unsigned ref, unsigned type) {
+XY_IMPL(int, on_examine, unsigned, player_ref, unsigned, ref, unsigned, type)
+{
 	OBJ obj;
 
 	if (type != type_plant)
@@ -159,11 +196,11 @@ int on_examine(unsigned player_ref, unsigned ref, unsigned type) {
 
 	nd_get(HD_OBJ, &obj, &ref);
 	PLA *pthing = (PLA *) &obj.data;
-	nd_writef(player_ref, "plant plid %u size %u.\n", pthing->plid, pthing->size);
+	nd_printf(player_ref, "plant plid %u size %u.\n", pthing->plid, pthing->size);
 	return 0;
 }
 
-int on_add(unsigned ref, unsigned type, uint64_t v)
+XY_IMPL(int, on_add, unsigned, ref, unsigned, type, uint64_t, v)
 {
 	OBJ obj;
 	SKEL skel;
@@ -182,16 +219,20 @@ int on_add(unsigned ref, unsigned type, uint64_t v)
 	return 0;
 }
 
-struct icon on_icon(unsigned ref, unsigned type,
-		unsigned player_ref __attribute__((unused)))
+/* The on_icon co-implementation is now a decorator. nd-core owns on_icon and
+ * runs the registered decorators in order; this one replaces the glyph with
+ * the plant's growth stage and adds the chop action. Registered in xy_install
+ * below. */
+static struct icon
+plant_icon_decorate(struct icon i, unsigned ref, unsigned type,
+	unsigned player_ref)
 {
 	OBJ obj;
 	SKEL skel;
 	PLA *pla = (PLA *) &obj.data;
 	SPLA *spla = (SPLA *) &skel.data;
-	struct icon i;
 
-	sic_last(&i);
+	(void) player_ref;
 	if (type != type_plant)
 		return i;
 
@@ -255,7 +296,6 @@ plants_noise(plant_tile_t *pd, uint32_t ty, coord_t tmp, ucoord_t rn, unsigned n
 			pdn = (pdn << 2) | (cpln & 3);
 			idc++;
 		}
-
 		v >>= 8;
 	}
 	pd->max = *idc;
@@ -273,7 +313,18 @@ plants_shuffle(plant_tile_t *pd, morton_t v)
 	register unsigned char i;
 	unsigned aux, pdn = 0;
 
-        for (i = 1; i <= 3; i++) {
+        /* i < 3, not i <= 3: this is one bubble pass over a THREE-element
+	 * array, swapping adjacent pairs (0,1) then (1,2). The bound was `<= 3`,
+	 * so the third iteration read and wrote apln[3] -- one byte past a
+	 * 3-byte stack array -- and pd->id[3], one word past a 3-element
+	 * member. That 1-byte stack overflow is what tripped
+	 * __stack_chk_fail during the all-19 boot: vanilla's on_new_player
+	 * teleports the new player, st_room_at() generates noise, on_noise
+	 * reaches plants_shuffle(), and the engine died with
+	 * "*** stack smashing detected ***" before mcp_auth_success ever ran.
+	 * Latent in nd-plant since the initial commit (main.c) -- nothing
+	 * implemented on_noise, so the function had never run. */
+        for (i = 1; i < 3; i++) {
 		pdn = pdn << 2;
 
                 if (v & i)
@@ -291,15 +342,17 @@ plants_shuffle(plant_tile_t *pd, morton_t v)
 	pd->n = apln[0] | (apln[1] << 2) | (apln[2] << 4);
 }
 
-struct bio on_noise(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t cl __attribute__((unused))) {
+XY_IMPL(struct bio, on_noise, struct bio, r, uint32_t, he, uint32_t, w, uint32_t, tm, uint32_t, cl)
+{
 	plant_tile_t pd;
 	pd.max = 0;
+	(void) cl;
 	if (he > w) {
 		r.ty = XXH32(&tm, sizeof(uint32_t), PLANTS_SEED);
 		plants_noise(&pd, r.ty, r.tmp, r.rn, 3);
 		plants_shuffle(&pd, ~(r.ty >> 8));
 	} else {
-		memset(pd.id, 0, 3);
+		memset(pd.id, 0, sizeof(pd.id));
 		pd.n = 0;
 	}
 
@@ -307,7 +360,8 @@ struct bio on_noise(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t
 	return r;
 }
 
-sic_str_t on_empty_tile(view_tile_t t, unsigned side, sic_str_t ss) {
+XY_IMPL(sic_str_t, on_empty_tile, view_tile_t, t, unsigned, side, sic_str_t, ss)
+{
 	char *b = ss.str;
 	plant_tile_t pd = * (plant_tile_t *) t.raw;
 
@@ -330,34 +384,34 @@ sic_str_t on_empty_tile(view_tile_t t, unsigned side, sic_str_t ss) {
 	return ss;
 }
 
-void mod_open(void) {
-	act_chop = action_register("chop", "🪓");
-}
+XY_MODULE_API void
+xy_install(void)
+{
+	/* Order matches the original: the chop action first, then the type,
+	 * consumables, drops and species. */
+	act_chop = (unsigned)action_register("chop", "🪓");
 
-void mod_install(void) {
 	unsigned consumable_type, other_type;
 
-	mod_open();
-
-	type_plant = nd_put(HD_TYPE, NULL, "plant");
+	type_plant = (unsigned)nd_put(HD_TYPE, NULL, "plant");
 	memcpy(&carrot.data, &carrot_con, sizeof(carrot_con));
 	memcpy(&tomato.data, &tomato_con, sizeof(tomato_con));
 
 	nd_get(HD_RTYPE, &consumable_type, "consumable");
 	tomato.type = carrot.type = consumable_type;
 
-	carrot_drop.skel = nd_put(HD_SKEL, NULL, &carrot);
-	unsigned carrot_drop_ref = nd_put(HD_DROP, NULL, &carrot_drop);
+	carrot_drop.skel = (unsigned)nd_put(HD_SKEL, NULL, &carrot);
+	unsigned carrot_drop_ref = (unsigned)nd_put(HD_DROP, NULL, &carrot_drop);
 
-	tomato_drop.skel = nd_put(HD_SKEL, NULL, &tomato);
-	unsigned tomato_drop_ref = nd_put(HD_DROP, NULL, &tomato_drop);
+	tomato_drop.skel = (unsigned)nd_put(HD_SKEL, NULL, &tomato);
+	unsigned tomato_drop_ref = (unsigned)nd_put(HD_DROP, NULL, &tomato_drop);
 
 	unsigned stick_drop_ref = NOTHING;
 	if (!nd_get(HD_RTYPE, &other_type, "other")) {
 		stick.type = other_type;
 		stick.max_art = 14;
-		stick_drop.skel = nd_put(HD_SKEL, NULL, &stick);
-		stick_drop_ref = nd_put(HD_DROP, NULL, &stick_drop);
+		stick_drop.skel = (unsigned)nd_put(HD_SKEL, NULL, &stick);
+		stick_drop_ref = (unsigned)nd_put(HD_DROP, NULL, &stick_drop);
 	}
 
 	plant_skel_add("pinus sylvestris", 19, GREEN, BOLD, 'x', 'X', 30, 70, 50, 1024, 4, stick_drop_ref);
@@ -370,4 +424,6 @@ void mod_install(void) {
 	plant_skel_add("acacia senegal", 12, GREEN, BOLD, 't', 'T', 40, 150, 20, 345, 4, stick_drop_ref);
 	plant_skel_add("daucus carota", 6, WHITE, 0, 'x', 'X', 38, 96, 100, 200, 4, carrot_drop_ref);
 	plant_skel_add("solanum lycopersicum", 11, RED, 0, 'x', 'X', 50, 98, 100, 200, 4, tomato_drop_ref);
+
+	core_icon_decorate(plant_icon_decorate);
 }
