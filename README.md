@@ -66,6 +66,10 @@ is gone.
   in `xy_install` (the shop precedent): it replaces the glyph with the
   growth stage and adds the chop action.
 
+## Packaged Assets
+
+- **Art (`art/`)**: Botanical, crop, and flora resource graphics (`carrot.png`, `flax.jpg`, and the `art/plant/` hierarchy).
+
 ## Testing
 
 There is no `test.sh` here. Behaviour is asserted by the engine's own suite:
