@@ -1,6 +1,6 @@
 all := libnd-plant
 
-LDLIBS-libnd-plant := -lxylem
+LDLIBS-libnd-plant := -lxylem -laxil-nd
 
 FOLDER := nd
 
