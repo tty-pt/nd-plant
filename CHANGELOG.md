@@ -1,4 +1,14 @@
-## 1.0.2
+## [1.1.0]
+
+- **Declarative DSV Table (`data/plants.dsv`)**:
+  - Exported 10 botanical species into declarative `data/plants.dsv` table.
+  - Refactored `src/libnd-plant.c` to load flora definitions dynamically via `nd_table_load()`.
+- **Two-Header Architecture (`<nd/plant-types.h>`)**:
+  - Extracted public types header `<nd/plant-types.h>` defining `plant_tile_t`.
+- **Documentation**:
+  - Standardized README with man-src, art, and modder guide.
+
+## [1.0.2]
 
 - **The sibling `-I` lines are gone.** `CFLAGS += -I$(shell cd .. && pwd)/…`
   pointed at the axil-nd/nd sibling checkouts and only existed for a dev

@@ -27,6 +27,7 @@
 #include <nd/xy.h>
 
 #include <string.h>
+#include <stdlib.h>
 
 #include <xxhash.h>
 
@@ -384,6 +385,53 @@ XY_IMPL(sic_str_t, on_empty_tile, view_tile_t, t, unsigned, side, sic_str_t, ss)
 	return ss;
 }
 
+struct plant_drop_ctx {
+	unsigned stick;
+	unsigned carrot;
+	unsigned tomato;
+};
+
+static int
+plant_row(const char *const *f, size_t n, void *user)
+{
+	static const struct { const char *n; unsigned v; } colors[] = {
+		{ "black", BLACK }, { "red", RED }, { "yellow", YELLOW },
+		{ "green", GREEN }, { "cyan", CYAN }, { "blue", BLUE },
+		{ "magenta", MAGENTA }, { "white", WHITE },
+	};
+	const struct plant_drop_ctx *drops = (const struct plant_drop_ctx *)user;
+	if (n < 12)
+		return 0;
+
+	const char *name = f[0];
+	unsigned max_art = (unsigned)atoi(f[1]);
+	unsigned fg = GREEN;
+	for (size_t i = 0; i < sizeof(colors) / sizeof(colors[0]); i++)
+		if (!strcmp(colors[i].n, f[2]))
+			fg = colors[i].v;
+
+	unsigned pi_flags = atoi(f[3]) ? BOLD : 0;
+	char small = f[4][0];
+	char big = f[5][0];
+	int16_t tmp_min = (int16_t)atoi(f[6]);
+	int16_t tmp_max = (int16_t)atoi(f[7]);
+	uint16_t rn_min = (uint16_t)atoi(f[8]);
+	uint16_t rn_max = (uint16_t)atoi(f[9]);
+	unsigned y = (unsigned)atoi(f[10]);
+
+	unsigned drop = NOTHING;
+	if (!strcmp(f[11], "stick"))
+		drop = drops->stick;
+	else if (!strcmp(f[11], "carrot"))
+		drop = drops->carrot;
+	else if (!strcmp(f[11], "tomato"))
+		drop = drops->tomato;
+
+	plant_skel_add(name, max_art, fg, pi_flags, small, big,
+			tmp_min, tmp_max, rn_min, rn_max, y, drop);
+	return 0;
+}
+
 XY_MODULE_API void
 xy_install(void)
 {
@@ -414,16 +462,13 @@ xy_install(void)
 		stick_drop_ref = (unsigned)nd_put(HD_DROP, NULL, &stick_drop);
 	}
 
-	plant_skel_add("pinus sylvestris", 19, GREEN, BOLD, 'x', 'X', 30, 70, 50, 1024, 4, stick_drop_ref);
-	plant_skel_add("pseudotsuga menziesii", 21, GREEN, BOLD, 't', 'T', 32, 100, 180, 350, 1, stick_drop_ref);
-	plant_skel_add("betula pendula", 14, YELLOW, 0, 'x', 'X', 30, 86, 0, 341, 4, stick_drop_ref);
-	plant_skel_add("linum usitatissimum", 7, YELLOW, 0, 'x', 'X', 30, 86, 20, 341, 30, stick_drop_ref);
-	plant_skel_add("betula pubescens", 0, WHITE, 0, 'x', 'X', 50, 146, 500, 900, 4, stick_drop_ref);
-	plant_skel_add("abies alba", 10, GREEN, BOLD, 'a', 'A', -40, 86, 100, 200, 4, stick_drop_ref);
-	plant_skel_add("arthrocereus rondonianus", 9, GREEN, BOLD, 'i', 'I', 110, 190, 10, 180, 4, stick_drop_ref);
-	plant_skel_add("acacia senegal", 12, GREEN, BOLD, 't', 'T', 40, 150, 20, 345, 4, stick_drop_ref);
-	plant_skel_add("daucus carota", 6, WHITE, 0, 'x', 'X', 38, 96, 100, 200, 4, carrot_drop_ref);
-	plant_skel_add("solanum lycopersicum", 11, RED, 0, 'x', 'X', 50, 98, 100, 200, 4, tomato_drop_ref);
+	struct plant_drop_ctx drops = {
+		.stick = stick_drop_ref,
+		.carrot = carrot_drop_ref,
+		.tomato = tomato_drop_ref,
+	};
+	if (nd_table_load("nd-plant", "plants", plant_row, &drops) < 0)
+		WARN("nd-plant: plants.dsv not found, no plants loaded\n");
 
 	core_icon_decorate(plant_icon_decorate);
 }

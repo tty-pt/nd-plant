@@ -13,9 +13,6 @@
 #ifndef ND_PLANT_H
 #define ND_PLANT_H
 
-typedef struct {
-	unsigned id[3];
-	unsigned char n, max;
-} plant_tile_t;
+#include <nd/plant-types.h>
 
 #endif /* !ND_PLANT_H */
