@@ -163,7 +163,16 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 		PLA *pplant = (PLA *) &plant.data;
 		pplant->plid = pd.id[i];
 		pplant->size = n;
-		object_add(&plant, pd.id[i], where_ref, v);
+		unsigned ref = object_add(&plant, pd.id[i], where_ref, v);
+		if (ref != NOTHING) {
+			OBJ saved;
+			if (nd_get(HD_OBJ, &saved, &ref) == 0) {
+				PLA *spla = (PLA *) &saved.data;
+				spla->plid = pd.id[i];
+				spla->size = n;
+				nd_put(HD_OBJ, &ref, &saved);
+			}
+		}
         }
 }
 
