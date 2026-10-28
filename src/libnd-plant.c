@@ -35,6 +35,19 @@
 #include <nd/drink.h>
 #include <nd/core.h>
 
+/* Mirrors CORE_ET_* in nd-view's type.h (the installed nd/core.h predates it). */
+#ifndef CORE_ET_ASCII
+#define CORE_ET_ASCII 0x80u
+#define CORE_ET_SIDE_MASK 0x03u
+#endif
+
+typedef struct bio (*core_noise_fn)(struct bio bio, uint32_t he, uint32_t w,
+	uint32_t tm, uint32_t cl);
+typedef sic_str_t (*core_empty_tile_fn)(view_tile_t t, unsigned side, sic_str_t ss);
+
+XY_DECL(int, core_noise_decorate, core_noise_fn, fn);
+XY_DECL(int, core_empty_tile_decorate, core_empty_tile_fn, fn);
+
 #define PLANT_EXTRA 4
 #define PLANT_MASK 0x3
 #define PLANT_HALF (PLANT_MASK >> 1)
@@ -352,7 +365,8 @@ plants_shuffle(plant_tile_t *pd, morton_t v)
 	pd->n = apln[0] | (apln[1] << 2) | (apln[2] << 4);
 }
 
-XY_IMPL(struct bio, on_noise, struct bio, r, uint32_t, he, uint32_t, w, uint32_t, tm, uint32_t, cl)
+static struct bio
+plant_noise_decorate(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t cl)
 {
 	plant_tile_t pd;
 	pd.max = 0;
@@ -370,10 +384,13 @@ XY_IMPL(struct bio, on_noise, struct bio, r, uint32_t, he, uint32_t, w, uint32_t
 	return r;
 }
 
-XY_IMPL(sic_str_t, on_empty_tile, view_tile_t, t, unsigned, side, sic_str_t, ss)
+static sic_str_t
+plant_empty_tile_decorate(view_tile_t t, unsigned side, sic_str_t ss)
 {
 	char *b = ss.str;
 	plant_tile_t pd = * (plant_tile_t *) t.raw;
+
+	side &= CORE_ET_SIDE_MASK;
 
 	if (PLANT_N(pd.n, side)) {
 		SKEL skel;
@@ -388,9 +405,11 @@ XY_IMPL(sic_str_t, on_empty_tile, view_tile_t, t, unsigned, side, sic_str_t, ss)
 		b = stpcpy(b, ansi_fg[pl->pi.fg]);
 		if (pl->pi.flags & BOLD)
 			b = stpcpy(b, ANSI_RESET_BOLD);
-	} else
+		*b = '\0';
+	} else {
 		*b++ = ' ';
-	*b = '\0';
+		*b = '\0';
+	}
 	return ss;
 }
 
@@ -479,5 +498,7 @@ xy_install(void)
 	if (nd_table_load("nd-plant", "plants", plant_row, &drops) < 0)
 		WARN("nd-plant: plants.dsv not found, no plants loaded\n");
 
+	core_noise_decorate(plant_noise_decorate);
+	core_empty_tile_decorate(plant_empty_tile_decorate);
 	core_icon_decorate(plant_icon_decorate);
 }
