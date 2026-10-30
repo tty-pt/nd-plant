@@ -1,0 +1,14 @@
+# name|max_art|color|bold|small|big|tmp_min|tmp_max|rn_min|rn_max|y|drop
+# color: black|red|yellow|green|cyan|blue|magenta|white
+# bold: 1 or 0
+# drop: stick|carrot|tomato|none
+pinus sylvestris|19|green|1|x|X|30|70|50|1024|4|stick
+pseudotsuga menziesii|21|green|1|t|T|32|100|180|350|1|stick
+betula pendula|14|yellow|0|x|X|30|86|0|341|4|stick
+linum usitatissimum|7|yellow|0|x|X|30|86|20|341|30|stick
+betula pubescens|0|white|0|x|X|50|146|500|900|4|stick
+abies alba|10|green|1|a|A|-40|86|100|200|4|stick
+arthrocereus rondonianus|9|green|1|i|I|110|190|10|180|4|stick
+acacia senegal|12|green|1|t|T|40|150|20|345|4|stick
+daucus carota|6|white|0|x|X|38|96|100|200|4|carrot
+solanum lycopersicum|11|red|0|x|X|50|98|100|200|4|tomato

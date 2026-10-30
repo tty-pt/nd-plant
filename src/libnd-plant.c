@@ -27,12 +27,21 @@
 #include <nd/xy.h>
 
 #include <string.h>
+#include <stdlib.h>
+#include <time.h>
+#include <ttypt/corm.h>
 
 #include <xxhash.h>
 
 #include <nd/plant.h>
 #include <nd/drink.h>
 #include <nd/core.h>
+
+/* Mirrors CORE_ET_* in nd-view's type.h (the installed nd/core.h predates it). */
+#ifndef CORE_ET_ASCII
+#define CORE_ET_ASCII 0x80u
+#define CORE_ET_SIDE_MASK 0x03u
+#endif
 
 #define PLANT_EXTRA 4
 #define PLANT_MASK 0x3
@@ -94,6 +103,19 @@ static DROP stick_drop = {
         .yield = 1,
         .yield_v = 0x3,
 };
+
+static unsigned stick_skel_id = NOTHING;
+
+#define STICK_HARVEST_MAX 1024
+#define STICK_RESPAWN_COOLDOWN 180 /* 3 minutes */
+
+typedef struct {
+	unsigned room;
+	uint32_t harvested_at;
+} stick_harvest_entry_t;
+
+static stick_harvest_entry_t s_stick_harvest[STICK_HARVEST_MAX];
+static size_t s_stick_harvest_n = 0;
 
 static SKEL tomato = {
         .name = "tomato",
@@ -162,7 +184,17 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 		PLA *pplant = (PLA *) &plant.data;
 		pplant->plid = pd.id[i];
 		pplant->size = n;
-		object_add(&plant, pd.id[i], where_ref, v);
+		unsigned ref = object_add(&plant, pd.id[i], where_ref, v);
+		if (ref != NOTHING) {
+			OBJ saved;
+			if (nd_get(HD_OBJ, &saved, &ref) == 0) {
+				PLA *spla = (PLA *) &saved.data;
+				spla->plid = pd.id[i];
+				spla->size = n;
+				nd_put(HD_OBJ, &ref, &saved);
+			}
+			/* Sticks are placed inside the tree container by on_add() */
+		}
         }
 }
 
@@ -342,7 +374,8 @@ plants_shuffle(plant_tile_t *pd, morton_t v)
 	pd->n = apln[0] | (apln[1] << 2) | (apln[2] << 4);
 }
 
-XY_IMPL(struct bio, on_noise, struct bio, r, uint32_t, he, uint32_t, w, uint32_t, tm, uint32_t, cl)
+static struct bio
+plant_noise_decorate(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t cl)
 {
 	plant_tile_t pd;
 	pd.max = 0;
@@ -360,10 +393,13 @@ XY_IMPL(struct bio, on_noise, struct bio, r, uint32_t, he, uint32_t, w, uint32_t
 	return r;
 }
 
-XY_IMPL(sic_str_t, on_empty_tile, view_tile_t, t, unsigned, side, sic_str_t, ss)
+static sic_str_t
+plant_empty_tile_decorate(view_tile_t t, unsigned side, sic_str_t ss)
 {
 	char *b = ss.str;
 	plant_tile_t pd = * (plant_tile_t *) t.raw;
+
+	side &= CORE_ET_SIDE_MASK;
 
 	if (PLANT_N(pd.n, side)) {
 		SKEL skel;
@@ -378,10 +414,120 @@ XY_IMPL(sic_str_t, on_empty_tile, view_tile_t, t, unsigned, side, sic_str_t, ss)
 		b = stpcpy(b, ansi_fg[pl->pi.fg]);
 		if (pl->pi.flags & BOLD)
 			b = stpcpy(b, ANSI_RESET_BOLD);
-	} else
+		*b = '\0';
+
+		if (t.room != NOTHING && t.room != 0 && stick_skel_id != NOTHING) {
+			unsigned c_hd = nd_table_handle(HD_CONTENTS);
+			if (c_hd) {
+				unsigned c = corm_iter(c_hd, &t.room, CM_RANGE);
+				const void *kp, *vp;
+				int has_stick = 0;
+				unsigned tree_in_room = NOTHING;
+				while (corm_next(&kp, &vp, c)) {
+					unsigned thing_ref = *(const unsigned *)vp;
+					OBJ obj;
+					if (nd_get(HD_OBJ, &obj, &thing_ref) == 0) {
+						if (obj.type == type_plant || obj.skid == pd.id[side]) {
+							if (tree_in_room == NOTHING)
+								tree_in_room = thing_ref;
+							unsigned tc = corm_iter(c_hd, &thing_ref, CM_RANGE);
+							const void *tkp, *tvp;
+							while (corm_next(&tkp, &tvp, tc)) {
+								unsigned sub_ref = *(const unsigned *)tvp;
+								OBJ sub_obj;
+								if (nd_get(HD_OBJ, &sub_obj, &sub_ref) == 0) {
+									if (sub_obj.skid == stick_skel_id || !strcmp(sub_obj.name, "stick")) {
+										has_stick = 1;
+										break;
+									}
+								}
+							}
+							corm_fin(tc);
+							if (has_stick)
+								break;
+						} else if (obj.skid == stick_skel_id || !strcmp(obj.name, "stick")) {
+							has_stick = 1;
+							break;
+						}
+					}
+				}
+				corm_fin(c);
+				if (!has_stick) {
+					uint32_t now = (uint32_t)time(NULL);
+					int found = -1;
+					for (size_t i = 0; i < s_stick_harvest_n; i++) {
+						if (s_stick_harvest[i].room == t.room) {
+							found = (int)i;
+							break;
+						}
+					}
+					if (found < 0) {
+						if (s_stick_harvest_n < STICK_HARVEST_MAX) {
+							s_stick_harvest[s_stick_harvest_n].room = t.room;
+							s_stick_harvest[s_stick_harvest_n].harvested_at = now;
+							s_stick_harvest_n++;
+						}
+					} else if (now - s_stick_harvest[found].harvested_at >= STICK_RESPAWN_COOLDOWN) {
+						/* Replenish sticks inside tree container (replenishes even in claimed rooms) */
+						unsigned target = (tree_in_room != NOTHING) ? tree_in_room : t.room;
+						object_drop(target, pd.id[side]);
+						s_stick_harvest[found] = s_stick_harvest[--s_stick_harvest_n];
+					}
+				}
+			}
+		}
+	} else {
 		*b++ = ' ';
-	*b = '\0';
+		*b = '\0';
+	}
 	return ss;
+}
+
+struct plant_drop_ctx {
+	unsigned stick;
+	unsigned carrot;
+	unsigned tomato;
+};
+
+static int
+plant_row(const char *const *f, size_t n, void *user)
+{
+	static const struct { const char *n; unsigned v; } colors[] = {
+		{ "black", BLACK }, { "red", RED }, { "yellow", YELLOW },
+		{ "green", GREEN }, { "cyan", CYAN }, { "blue", BLUE },
+		{ "magenta", MAGENTA }, { "white", WHITE },
+	};
+	const struct plant_drop_ctx *drops = (const struct plant_drop_ctx *)user;
+	if (n < 12)
+		return 0;
+
+	const char *name = f[0];
+	unsigned max_art = (unsigned)atoi(f[1]);
+	unsigned fg = GREEN;
+	for (size_t i = 0; i < sizeof(colors) / sizeof(colors[0]); i++)
+		if (!strcmp(colors[i].n, f[2]))
+			fg = colors[i].v;
+
+	unsigned pi_flags = atoi(f[3]) ? BOLD : 0;
+	char small = f[4][0];
+	char big = f[5][0];
+	int16_t tmp_min = (int16_t)atoi(f[6]);
+	int16_t tmp_max = (int16_t)atoi(f[7]);
+	uint16_t rn_min = (uint16_t)atoi(f[8]);
+	uint16_t rn_max = (uint16_t)atoi(f[9]);
+	unsigned y = (unsigned)atoi(f[10]);
+
+	unsigned drop = NOTHING;
+	if (!strcmp(f[11], "stick"))
+		drop = drops->stick;
+	else if (!strcmp(f[11], "carrot"))
+		drop = drops->carrot;
+	else if (!strcmp(f[11], "tomato"))
+		drop = drops->tomato;
+
+	plant_skel_add(name, max_art, fg, pi_flags, small, big,
+			tmp_min, tmp_max, rn_min, rn_max, y, drop);
+	return 0;
 }
 
 XY_MODULE_API void
@@ -412,18 +558,18 @@ xy_install(void)
 		stick.max_art = 14;
 		stick_drop.skel = (unsigned)nd_put(HD_SKEL, NULL, &stick);
 		stick_drop_ref = (unsigned)nd_put(HD_DROP, NULL, &stick_drop);
+		stick_skel_id = stick_drop.skel;
 	}
 
-	plant_skel_add("pinus sylvestris", 19, GREEN, BOLD, 'x', 'X', 30, 70, 50, 1024, 4, stick_drop_ref);
-	plant_skel_add("pseudotsuga menziesii", 21, GREEN, BOLD, 't', 'T', 32, 100, 180, 350, 1, stick_drop_ref);
-	plant_skel_add("betula pendula", 14, YELLOW, 0, 'x', 'X', 30, 86, 0, 341, 4, stick_drop_ref);
-	plant_skel_add("linum usitatissimum", 7, YELLOW, 0, 'x', 'X', 30, 86, 20, 341, 30, stick_drop_ref);
-	plant_skel_add("betula pubescens", 0, WHITE, 0, 'x', 'X', 50, 146, 500, 900, 4, stick_drop_ref);
-	plant_skel_add("abies alba", 10, GREEN, BOLD, 'a', 'A', -40, 86, 100, 200, 4, stick_drop_ref);
-	plant_skel_add("arthrocereus rondonianus", 9, GREEN, BOLD, 'i', 'I', 110, 190, 10, 180, 4, stick_drop_ref);
-	plant_skel_add("acacia senegal", 12, GREEN, BOLD, 't', 'T', 40, 150, 20, 345, 4, stick_drop_ref);
-	plant_skel_add("daucus carota", 6, WHITE, 0, 'x', 'X', 38, 96, 100, 200, 4, carrot_drop_ref);
-	plant_skel_add("solanum lycopersicum", 11, RED, 0, 'x', 'X', 50, 98, 100, 200, 4, tomato_drop_ref);
+	struct plant_drop_ctx drops = {
+		.stick = stick_drop_ref,
+		.carrot = carrot_drop_ref,
+		.tomato = tomato_drop_ref,
+	};
+	if (nd_table_load("nd-plant", "plants", plant_row, &drops) < 0)
+		WARN("nd-plant: plants.dsv not found, no plants loaded\n");
 
+	core_noise_decorate(plant_noise_decorate);
+	core_empty_tile_decorate(plant_empty_tile_decorate);
 	core_icon_decorate(plant_icon_decorate);
 }
