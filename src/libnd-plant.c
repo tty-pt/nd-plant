@@ -28,6 +28,8 @@
 
 #include <string.h>
 #include <stdlib.h>
+#include <time.h>
+#include <ttypt/corm.h>
 
 #include <xxhash.h>
 
@@ -40,13 +42,6 @@
 #define CORE_ET_ASCII 0x80u
 #define CORE_ET_SIDE_MASK 0x03u
 #endif
-
-typedef struct bio (*core_noise_fn)(struct bio bio, uint32_t he, uint32_t w,
-	uint32_t tm, uint32_t cl);
-typedef sic_str_t (*core_empty_tile_fn)(view_tile_t t, unsigned side, sic_str_t ss);
-
-XY_DECL(int, core_noise_decorate, core_noise_fn, fn);
-XY_DECL(int, core_empty_tile_decorate, core_empty_tile_fn, fn);
 
 #define PLANT_EXTRA 4
 #define PLANT_MASK 0x3
@@ -108,6 +103,19 @@ static DROP stick_drop = {
         .yield = 1,
         .yield_v = 0x3,
 };
+
+static unsigned stick_skel_id = NOTHING;
+
+#define STICK_HARVEST_MAX 1024
+#define STICK_RESPAWN_COOLDOWN 180 /* 3 minutes */
+
+typedef struct {
+	unsigned room;
+	uint32_t harvested_at;
+} stick_harvest_entry_t;
+
+static stick_harvest_entry_t s_stick_harvest[STICK_HARVEST_MAX];
+static size_t s_stick_harvest_n = 0;
 
 static SKEL tomato = {
         .name = "tomato",
@@ -185,6 +193,8 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 				spla->size = n;
 				nd_put(HD_OBJ, &ref, &saved);
 			}
+			/* Drop fallen sticks onto the room ground */
+			object_drop(where_ref, pd.id[i]);
 		}
         }
 }
@@ -406,6 +416,47 @@ plant_empty_tile_decorate(view_tile_t t, unsigned side, sic_str_t ss)
 		if (pl->pi.flags & BOLD)
 			b = stpcpy(b, ANSI_RESET_BOLD);
 		*b = '\0';
+
+		if (t.room != NOTHING && t.room != 0 && stick_skel_id != NOTHING) {
+			unsigned c_hd = nd_table_handle(HD_CONTENTS);
+			if (c_hd) {
+				unsigned c = corm_iter(c_hd, &t.room, CM_RANGE);
+				const void *kp, *vp;
+				int has_stick = 0;
+				while (corm_next(&kp, &vp, c)) {
+					unsigned thing_ref = *(const unsigned *)vp;
+					OBJ obj;
+					if (nd_get(HD_OBJ, &obj, &thing_ref) == 0) {
+						if (obj.skid == stick_skel_id || !strcmp(obj.name, "stick")) {
+							has_stick = 1;
+							break;
+						}
+					}
+				}
+				corm_fin(c);
+				if (!has_stick) {
+					uint32_t now = (uint32_t)time(NULL);
+					int found = -1;
+					for (size_t i = 0; i < s_stick_harvest_n; i++) {
+						if (s_stick_harvest[i].room == t.room) {
+							found = (int)i;
+							break;
+						}
+					}
+					if (found < 0) {
+						if (s_stick_harvest_n < STICK_HARVEST_MAX) {
+							s_stick_harvest[s_stick_harvest_n].room = t.room;
+							s_stick_harvest[s_stick_harvest_n].harvested_at = now;
+							s_stick_harvest_n++;
+						}
+					} else if (now - s_stick_harvest[found].harvested_at >= STICK_RESPAWN_COOLDOWN) {
+						/* Replenish sticks under tree (replenishes even in claimed rooms) */
+						object_drop(t.room, pd.id[side]);
+						s_stick_harvest[found] = s_stick_harvest[--s_stick_harvest_n];
+					}
+				}
+			}
+		}
 	} else {
 		*b++ = ' ';
 		*b = '\0';
@@ -488,6 +539,7 @@ xy_install(void)
 		stick.max_art = 14;
 		stick_drop.skel = (unsigned)nd_put(HD_SKEL, NULL, &stick);
 		stick_drop_ref = (unsigned)nd_put(HD_DROP, NULL, &stick_drop);
+		stick_skel_id = stick_drop.skel;
 	}
 
 	struct plant_drop_ctx drops = {
