@@ -193,8 +193,7 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 				spla->size = n;
 				nd_put(HD_OBJ, &ref, &saved);
 			}
-			/* Drop fallen sticks onto the room ground */
-			object_drop(where_ref, pd.id[i]);
+			/* Sticks are placed inside the tree container by on_add() */
 		}
         }
 }
@@ -423,11 +422,30 @@ plant_empty_tile_decorate(view_tile_t t, unsigned side, sic_str_t ss)
 				unsigned c = corm_iter(c_hd, &t.room, CM_RANGE);
 				const void *kp, *vp;
 				int has_stick = 0;
+				unsigned tree_in_room = NOTHING;
 				while (corm_next(&kp, &vp, c)) {
 					unsigned thing_ref = *(const unsigned *)vp;
 					OBJ obj;
 					if (nd_get(HD_OBJ, &obj, &thing_ref) == 0) {
-						if (obj.skid == stick_skel_id || !strcmp(obj.name, "stick")) {
+						if (obj.type == type_plant || obj.skid == pd.id[side]) {
+							if (tree_in_room == NOTHING)
+								tree_in_room = thing_ref;
+							unsigned tc = corm_iter(c_hd, &thing_ref, CM_RANGE);
+							const void *tkp, *tvp;
+							while (corm_next(&tkp, &tvp, tc)) {
+								unsigned sub_ref = *(const unsigned *)tvp;
+								OBJ sub_obj;
+								if (nd_get(HD_OBJ, &sub_obj, &sub_ref) == 0) {
+									if (sub_obj.skid == stick_skel_id || !strcmp(sub_obj.name, "stick")) {
+										has_stick = 1;
+										break;
+									}
+								}
+							}
+							corm_fin(tc);
+							if (has_stick)
+								break;
+						} else if (obj.skid == stick_skel_id || !strcmp(obj.name, "stick")) {
 							has_stick = 1;
 							break;
 						}
@@ -450,8 +468,9 @@ plant_empty_tile_decorate(view_tile_t t, unsigned side, sic_str_t ss)
 							s_stick_harvest_n++;
 						}
 					} else if (now - s_stick_harvest[found].harvested_at >= STICK_RESPAWN_COOLDOWN) {
-						/* Replenish sticks under tree (replenishes even in claimed rooms) */
-						object_drop(t.room, pd.id[side]);
+						/* Replenish sticks inside tree container (replenishes even in claimed rooms) */
+						unsigned target = (tree_in_room != NOTHING) ? tree_in_room : t.room;
+						object_drop(target, pd.id[side]);
 						s_stick_harvest[found] = s_stick_harvest[--s_stick_harvest_n];
 					}
 				}
