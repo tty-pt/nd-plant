@@ -2,7 +2,7 @@
 
 `nd-plant` for [axil-nd](../axil-nd), ported from SIC to libxylem.
 
-Owns plants: the ten tree/crop species, their skeletons and drops, map
+Owns plants: the 16 tree, shrub, flower, and crop species, their skeletons and drops, map
 generation (`on_noise`, `on_empty_tile`, `on_spawn`), and the carrot/tomato
 consumables that feed nd-drink. The `plant_tile_t` the map layer and nd-mob
 read is defined in `<nd/plant.h>`.

@@ -2,13 +2,19 @@
 # color: black|red|yellow|green|cyan|blue|magenta|white
 # bold: 1 or 0
 # drop: stick|carrot|tomato|none
-pinus sylvestris|19|green|1|x|X|30|70|50|1024|4|stick
-pseudotsuga menziesii|21|green|1|t|T|32|100|180|350|1|stick
-betula pendula|14|yellow|0|x|X|30|86|0|341|4|stick
-linum usitatissimum|7|yellow|0|x|X|30|86|20|341|30|stick
-betula pubescens|0|white|0|x|X|50|146|500|900|4|stick
-abies alba|10|green|1|a|A|-40|86|100|200|4|stick
-arthrocereus rondonianus|9|green|1|i|I|110|190|10|180|4|stick
-acacia senegal|12|green|1|t|T|40|150|20|345|4|stick
-daucus carota|6|white|0|x|X|38|96|100|200|4|carrot
-solanum lycopersicum|11|red|0|x|X|50|98|100|200|4|tomato
+pinus sylvestris|19|green|1|x|X|20|80|50|1024|4|stick
+pseudotsuga menziesii|21|green|1|t|T|25|95|180|350|1|stick
+betula pendula|14|yellow|0|x|X|30|90|0|341|4|stick
+linum usitatissimum|7|yellow|0|x|X|30|90|20|341|30|stick
+betula pubescens|0|white|0|x|X|40|130|400|900|4|stick
+abies alba|10|green|1|a|A|-40|75|80|300|4|stick
+arthrocereus rondonianus|9|green|1|i|I|100|190|10|180|4|stick
+acacia senegal|12|yellow|1|t|T|60|160|20|345|4|stick
+daucus carota|6|white|0|x|X|38|105|80|250|4|carrot
+solanum lycopersicum|11|red|0|x|X|50|115|80|250|4|tomato
+quercus robur|14|green|1|x|X|45|125|60|400|4|stick
+salix babylonica|14|green|0|w|W|40|120|140|600|4|stick
+acer pseudoplatanus|14|green|1|x|X|35|110|70|380|4|stick
+olea europaea|12|yellow|0|v|V|70|145|20|220|4|stick
+bellis perennis|7|white|1|f|F|30|120|40|350|4|none
+typha latifolia|7|cyan|0|r|R|25|125|160|600|4|stick

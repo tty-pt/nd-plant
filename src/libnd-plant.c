@@ -75,6 +75,12 @@ enum base_plant {
 	PLANT_ACACIA_SENEGAL,
 	PLANT_DAUCUS_CAROTA,
 	PLANT_SOLANUM_LYCOPERSICUM,
+	PLANT_QUERCUS_ROBUR,
+	PLANT_SALIX_BABYLONICA,
+	PLANT_ACER_PSEUDOPLATANUS,
+	PLANT_OLEA_EUROPAEA,
+	PLANT_BELLIS_PERENNIS,
+	PLANT_TYPHA_LATIFOLIA,
 	PLANT_MAX,
 };
 
@@ -378,9 +384,9 @@ static struct bio
 plant_noise_decorate(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t cl)
 {
 	plant_tile_t pd;
-	pd.max = 0;
+	memset(&pd, 0, sizeof(pd));
 	(void) cl;
-	if (he > w) {
+	if (he >= w || !r.is_water) {
 		r.ty = XXH32(&tm, sizeof(uint32_t), PLANTS_SEED);
 		plants_noise(&pd, r.ty, r.tmp, r.rn, 3);
 		plants_shuffle(&pd, ~(r.ty >> 8));
