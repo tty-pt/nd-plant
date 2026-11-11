@@ -285,116 +285,12 @@ plant_icon_decorate(struct icon i, unsigned ref, unsigned type,
 	return i;
 }
 
-static inline unsigned char
-plant_noise(unsigned *plid, coord_t tmp, ucoord_t rn, uint32_t v, unsigned plant_ref)
-{
-	SKEL skel;
-	nd_get(HD_SKEL, &skel, &plant_ref);
-	SPLA *pl = (SPLA *) &skel.data;
-
-        if (v >= (NOISE_MAX >> pl->y))
-                return 0;
-	/* if (((v >> 6) ^ (v >> 3) ^ v) & 1) */
-	/* 	return 0; */
-
-	if (tmp < pl->tmp_max && tmp > pl->tmp_min
-	    && rn < pl->rn_max && rn > pl->rn_min) {
-		*plid = plant_ref;
-		v = (v >> 1) & PLANT_MASK;
-		if (v == 3)
-			v = 0;
-                return v;
-	}
-
-	return 0;
-}
-
-static inline void
-plants_noise(plant_tile_t *pd, uint32_t ty, coord_t tmp, ucoord_t rn, unsigned n)
-{
-	uint32_t v = ty;
-	register int cpln;
-	unsigned *idc = pd->id;
-	unsigned ref;
-	unsigned pdn = 0;
-
-	for (int i = 0; i < PLANT_MAX; i++) {
-		if (idc >= &pd->id[n]) {
-			break;
-		}
-
-		ref = plant_refs[i];
-
-		if (!v)
-			v = XXH32((const char *) &ty, sizeof(ty), ref);
-
-		cpln = plant_noise(idc, tmp, rn, v, ref);
-
-		if (cpln) {
-			pdn = (pdn << 2) | (cpln & 3);
-			idc++;
-		}
-		v >>= 8;
-	}
-	pd->max = *idc;
-	pd->n = pdn;
-}
-
-static void
-plants_shuffle(plant_tile_t *pd, morton_t v)
-{
-        unsigned char apln[3] = {
-                pd->n & 3,
-                (pd->n >> 2) & 3,
-                (pd->n >> 4) & 3,
-        };
-	register unsigned char i;
-	unsigned aux, pdn = 0;
-
-        /* i < 3, not i <= 3: this is one bubble pass over a THREE-element
-	 * array, swapping adjacent pairs (0,1) then (1,2). The bound was `<= 3`,
-	 * so the third iteration read and wrote apln[3] -- one byte past a
-	 * 3-byte stack array -- and pd->id[3], one word past a 3-element
-	 * member. That 1-byte stack overflow is what tripped
-	 * __stack_chk_fail during the all-19 boot: vanilla's on_new_player
-	 * teleports the new player, st_room_at() generates noise, on_noise
-	 * reaches plants_shuffle(), and the engine died with
-	 * "*** stack smashing detected ***" before mcp_auth_success ever ran.
-	 * Latent in nd-plant since the initial commit (main.c) -- nothing
-	 * implemented on_noise, so the function had never run. */
-        for (i = 1; i < 3; i++) {
-		pdn = pdn << 2;
-
-                if (v & i)
-                        continue;
-
-                aux = pd->id[i - 1];
-                pd->id[i - 1] = pd->id[i];
-                pd->id[i] = aux;
-
-                aux = apln[i - 1];
-                apln[i - 1] = apln[i];
-                apln[i] = aux;
-        }
-
-	pd->n = apln[0] | (apln[1] << 2) | (apln[2] << 4);
-}
-
 static struct bio
 plant_noise_decorate(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t cl)
 {
 	plant_tile_t pd;
-	memset(&pd, 0, sizeof(pd));
 	(void) cl;
-	if (he >= w || !r.is_water) {
-		r.ty = XXH32(&tm, sizeof(uint32_t), PLANTS_SEED);
-		plants_noise(&pd, r.ty, r.tmp, r.rn, 3);
-		plants_shuffle(&pd, ~(r.ty >> 8));
-	} else {
-		memset(pd.id, 0, sizeof(pd.id));
-		pd.n = 0;
-	}
-
+	r.ty = nd_plant_noise_eval(&pd, he, w, r.is_water, tm, r.tmp, r.rn, plant_refs);
 	memcpy(r.raw, &pd, sizeof(pd));
 	return r;
 }
