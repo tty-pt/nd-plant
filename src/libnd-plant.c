@@ -56,7 +56,12 @@ typedef struct plant_skel {
 	int16_t tmp_min, tmp_max;
 	uint16_t rn_min, rn_max;
 	unsigned y;
+	uint8_t small_art, big_art;
+	uint8_t small_col, big_col;
+	uint8_t spec_idx;
 } SPLA;
+
+_Static_assert(sizeof(SPLA) <= sizeof(((SKEL *)0)->data), "SPLA must fit in SKEL.data");
 
 // instance
 typedef struct {
@@ -145,18 +150,26 @@ static inline unsigned plant_skel_add(
 		char small, char big, 
 		int16_t tmp_min, int16_t tmp_max,
 		uint16_t rn_min, uint16_t rn_max,
-		unsigned y, unsigned drop)
+		unsigned y, unsigned drop,
+		uint8_t small_art, uint8_t big_art,
+		uint8_t small_col, uint8_t big_col)
 {
 	SKEL skel = {
 		.max_art = max_art,
 		.type = type_plant,
 	};
+	int spec_idx = nd_plant_find_spec(name);
 	SPLA spla = {
 		.pi = { .fg = fg, .flags = pi_flags, },
 		.small = small, .big = big,
 		.tmp_min = tmp_min, .tmp_max = tmp_max,
 		.rn_min = rn_min, .rn_max = rn_max,
 		.y = y,
+		.small_art = small_art ? small_art : 4,
+		.big_art = big_art ? big_art : 4,
+		.small_col = small_col,
+		.big_col = big_col,
+		.spec_idx = (uint8_t)(spec_idx >= 0 ? spec_idx : (int)gen_plant_n),
 	};
 	unsigned id;
 
@@ -190,7 +203,8 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 		PLA *pplant = (PLA *) &plant.data;
 		pplant->plid = pd.id[i];
 		pplant->size = n;
-		unsigned ref = object_add(&plant, pd.id[i], where_ref, v);
+		uint64_t pv = (v & 0xffu) | ((uint64_t)(n & 3u) << 8) | ((uint64_t)pd.id[i] << 16);
+		unsigned ref = object_add(&plant, pd.id[i], where_ref, pv);
 		if (ref != NOTHING) {
 			OBJ saved;
 			if (nd_get(HD_OBJ, &saved, &ref) == 0) {
@@ -249,12 +263,52 @@ XY_IMPL(int, on_add, unsigned, ref, unsigned, type, uint64_t, v)
 	nd_get(HD_OBJ, &obj, &ref);
 	nd_get(HD_SKEL, &skel, &obj.skid);
 
+	PLA *pla = (PLA *) &obj.data;
+	SPLA *spla = (SPLA *) &skel.data;
+	if (pla->size == 0 && ((v >> 8) & 3u) != 0) {
+		pla->size = (unsigned)((v >> 8) & 3u);
+		pla->plid = (unsigned)(v >> 16);
+	}
+
 	object_drop(ref, obj.skid);
-	unsigned max = skel.max_art;
-	obj.art_id = max ? 1 + (v & 0xf) % max : 0;
+	unsigned stage_max = (pla->size > PLANT_HALF) ? spla->big_art : spla->small_art;
+	if (!stage_max)
+		stage_max = skel.max_art ? skel.max_art : 4;
+	obj.art_id = 1 + (unsigned)((v & 0xf) % stage_max);
 
 	nd_put(HD_OBJ, &ref, &obj);
 	return 0;
+}
+
+static int
+plant_art_decorate(unsigned ref, unsigned type, char *buf, size_t len)
+{
+	OBJ obj;
+	SKEL skel;
+
+	if (type != type_plant || !buf || !len)
+		return 0;
+	if (nd_get(HD_OBJ, &obj, &ref) != 0)
+		return 0;
+	if (nd_get(HD_SKEL, &skel, &obj.skid) != 0)
+		return 0;
+
+	PLA *pla = (PLA *) &obj.data;
+	SPLA *spla = (SPLA *) &skel.data;
+	const char *stage = (pla->size > PLANT_HALF) ? "big" : "small";
+	unsigned stage_max = (pla->size > PLANT_HALF) ? spla->big_art : spla->small_art;
+	if (!stage_max)
+		stage_max = 4;
+	unsigned art_id = obj.art_id ? ((obj.art_id - 1u) % stage_max) + 1u : 1u;
+
+	char slug[32];
+	size_t i = 0;
+	for (; i < sizeof(slug) - 1 && skel.name[i]; i++)
+		slug[i] = (skel.name[i] == ' ') ? '_' : skel.name[i];
+	slug[i] = '\0';
+
+	snprintf(buf, len, "plant/%s/%s/%u.png", slug, stage, art_id);
+	return 1;
 }
 
 /* The on_icon co-implementation is now a decorator. nd-core owns on_icon and
@@ -427,8 +481,15 @@ plant_row(const char *const *f, size_t n, void *user)
 	else if (!strcmp(f[11], "tomato"))
 		drop = drops->tomato;
 
+	int spec_idx = nd_plant_find_spec(name);
+	uint8_t small_art = (n > 12) ? (uint8_t)atoi(f[12]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].small_art : 2);
+	uint8_t big_art   = (n > 13) ? (uint8_t)atoi(f[13]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].big_art   : 2);
+	uint8_t small_col = (n > 14) ? (uint8_t)atoi(f[14]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].small_col : 1);
+	uint8_t big_col   = (n > 15) ? (uint8_t)atoi(f[15]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].big_col   : 1);
+
 	plant_skel_add(name, max_art, fg, pi_flags, small, big,
-			tmp_min, tmp_max, rn_min, rn_max, y, drop);
+			tmp_min, tmp_max, rn_min, rn_max, y, drop,
+			small_art, big_art, small_col, big_col);
 	return 0;
 }
 
@@ -474,4 +535,5 @@ xy_install(void)
 	core_noise_decorate(plant_noise_decorate);
 	core_empty_tile_decorate(plant_empty_tile_decorate);
 	core_icon_decorate(plant_icon_decorate);
+	core_art_decorate(plant_art_decorate);
 }

@@ -40,33 +40,66 @@ nd_xxh32_u32(uint32_t val, uint32_t seed)
 }
 #endif
 
+/* Ground-plane collision footprint tiers relative to bottom-center (0, 0) anchor */
+#define ND_PLANT_COL_NONE 0u /* Walkable ground flora / crop / herb */
+#define ND_PLANT_COL_STD  1u /* Standard 1-cell tree trunk / cactus base */
+#define ND_PLANT_COL_WIDE 2u /* Wide mature trunk base */
+
+/* Packed per-slot wire byte (nd_map_tile_t.plant_id[s]):
+ * bits 0..4: 1-based species index (1..16, 0 = none)
+ * bit 5:     growth stage (0 = small, 1 = big)
+ * bits 6..7: art variant index (0..3 -> variants 1..4) */
+#define ND_PLANT_PACK_ID(idx, big, var0) \
+	((uint8_t)((((idx) + 1u) & 0x1Fu) | ((big) ? 0x20u : 0u) | (((var0) & 3u) << 6)))
+#define ND_PLANT_UNPACK_PRESENT(pid) (((pid) & 0x1Fu) != 0u && (((pid) & 0x1Fu) <= ND_PLANT_MAX))
+#define ND_PLANT_UNPACK_IDX(pid)     ((unsigned)(((pid) & 0x1Fu) ? (((pid) & 0x1Fu) - 1u) : 0u))
+#define ND_PLANT_UNPACK_BIG(pid)     ((unsigned)(((pid) >> 5) & 1u))
+#define ND_PLANT_UNPACK_VAR(pid)     ((unsigned)((((pid) >> 6) & 3u) + 1u))
+
 typedef struct {
-	int16_t  tmp_min, tmp_max;
-	uint16_t rn_min, rn_max;
-	uint8_t  y;
-	char     small, big;
-	uint8_t  fg;
+	int16_t     tmp_min, tmp_max;
+	uint16_t    rn_min, rn_max;
+	uint8_t     y;
+	char        small, big;
+	uint8_t     fg;
+	uint8_t     small_art, big_art;
+	uint8_t     small_col, big_col;
+	const char *name;
+	const char *slug;
 } nd_plant_spec_t;
 
 /* Canonical 16-species envelope table matching external/nd-plant/data/plants.dsv */
 static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
-	/* 0  pinus sylvestris         */ {  20,  80,  50, 1024,  4, 'x', 'X', 10 },
-	/* 1  pseudotsuga menziesii    */ {  25,  95, 180,  350,  1, 't', 'T', 10 },
-	/* 2  betula pendula           */ {  30,  90,   0,  341,  4, 'x', 'X',  3 },
-	/* 3  linum usitatissimum      */ {  30,  90,  20,  341, 30, 'x', 'X',  3 },
-	/* 4  betula pubescens         */ {  40, 130, 400,  900,  4, 'x', 'X',  7 },
-	/* 5  abies alba               */ { -40,  75,  80,  300,  4, 'a', 'A', 10 },
-	/* 6  arthrocereus rondonianus */ { 100, 190,  10,  180,  4, 'i', 'I', 10 },
-	/* 7  acacia senegal           */ {  60, 160,  20,  345,  4, 't', 'T', 11 },
-	/* 8  daucus carota            */ {  38, 105,  80,  250,  4, 'x', 'X',  7 },
-	/* 9  solanum lycopersicum     */ {  50, 115,  80,  250,  4, 'x', 'X',  1 },
-	/* 10 quercus robur            */ {  45, 125,  60,  400,  4, 'x', 'X', 10 },
-	/* 11 salix babylonica         */ {  40, 120, 140,  600,  4, 'w', 'W',  2 },
-	/* 12 acer pseudoplatanus      */ {  35, 110,  70,  380,  4, 'x', 'X', 10 },
-	/* 13 olea europaea            */ {  70, 145,  20,  220,  4, 'v', 'V',  3 },
-	/* 14 bellis perennis          */ {  30, 120,  40,  350,  4, 'f', 'F', 15 },
-	/* 15 typha latifolia          */ {  25, 125, 160,  600,  4, 'r', 'R',  6 },
+	/* 0  */ {  10,  78,  50, 1024,  2, 'x', 'X', 10, 4, 4, 1, 1, "pinus sylvestris",         "pinus_sylvestris" },
+	/* 1  */ {  15,  92, 160,  380,  2, 't', 'T', 10, 4, 4, 1, 1, "pseudotsuga menziesii",    "pseudotsuga_menziesii" },
+	/* 2  */ {  25, 116,  30,  385,  2, 'x', 'X',  3, 4, 4, 1, 1, "betula pendula",           "betula_pendula" },
+	/* 3  */ {  30,  95,  20,  341,  6, 'x', 'X',  3, 4, 4, 0, 0, "linum usitatissimum",      "linum_usitatissimum" },
+	/* 4  */ {  35, 125, 240,  900,  2, 'x', 'X',  7, 4, 4, 1, 1, "betula pubescens",         "betula_pubescens" },
+	/* 5  */ { -40,  72,  80,  320,  2, 'a', 'A', 10, 4, 4, 1, 2, "abies alba",               "abies_alba" },
+	/* 6  */ { 105, 190,  10,  175,  3, 'i', 'I', 10, 4, 4, 1, 1, "arthrocereus rondonianus", "arthrocereus_rondonianus" },
+	/* 7  */ { 115, 168,  40,  290,  2, 't', 'T', 11, 4, 4, 1, 1, "acacia senegal",           "acacia_senegal" },
+	/* 8  */ {  38, 105,  80,  250,  4, 'x', 'X',  7, 4, 4, 0, 0, "daucus carota",            "daucus_carota" },
+	/* 9  */ {  50, 115,  80,  250,  4, 'x', 'X',  1, 4, 4, 0, 0, "solanum lycopersicum",     "solanum_lycopersicum" },
+	/* 10 */ {  45, 125,  60,  410,  1, 'x', 'X', 10, 4, 4, 1, 2, "quercus robur",            "quercus_robur" },
+	/* 11 */ {  40, 122, 150,  600,  2, 'w', 'W',  2, 4, 4, 1, 2, "salix babylonica",         "salix_babylonica" },
+	/* 12 */ {  38, 122,  70,  410,  1, 'x', 'X', 10, 4, 4, 1, 2, "acer pseudoplatanus",      "acer_pseudoplatanus" },
+	/* 13 */ {  75, 148,  20,  230,  3, 'v', 'V',  3, 4, 4, 1, 2, "olea europaea",            "olea_europaea" },
+	/* 14 */ {  30, 120,  40,  360,  4, 'f', 'F', 15, 4, 4, 0, 0, "bellis perennis",          "bellis_perennis" },
+	/* 15 */ {  25, 125, 180,  600,  4, 'r', 'R',  6, 4, 4, 0, 0, "typha latifolia",          "typha_latifolia" },
 };
+
+static inline int
+nd_plant_find_spec(const char *name)
+{
+	if (!name || !name[0])
+		return -1;
+	for (unsigned i = 0; i < ND_PLANT_MAX; i++) {
+		if (!strcmp(s_nd_plant_specs[i].name, name) ||
+		    !strcmp(s_nd_plant_specs[i].slug, name))
+			return (int)i;
+	}
+	return -1;
+}
 
 static inline uint32_t
 nd_plant_noise_eval(plant_tile_t *pd, uint32_t he, uint32_t w, uint8_t is_water,
@@ -76,41 +109,68 @@ nd_plant_noise_eval(plant_tile_t *pd, uint32_t he, uint32_t w, uint8_t is_water,
 	if (he < w && is_water)
 		return 0;
 
-	uint32_t ty = nd_xxh32_u32(tm, ND_PLANTS_SEED);
-	uint32_t v = ty;
-	unsigned *idc = pd->id;
-	unsigned pdn = 0;
+	uint32_t ty = nd_xxh32_u32(tm ^ he, ND_PLANTS_SEED);
+	unsigned cand_id[ND_PLANT_MAX];
+	unsigned char cand_sz[ND_PLANT_MAX];
+	uint32_t cand_prio[ND_PLANT_MAX];
+	unsigned cand_n = 0;
 
 	for (unsigned i = 0; i < ND_PLANT_MAX; i++) {
-		if (idc >= &pd->id[3])
-			break;
-		if (!v)
-			v = nd_xxh32_u32(ty, i + 1u);
-
 		const nd_plant_spec_t *pl = &s_nd_plant_specs[i];
+		if (tmp <= pl->tmp_min || tmp >= pl->tmp_max ||
+		    rn <= pl->rn_min || rn >= pl->rn_max)
+			continue;
+
+		uint32_t sv = nd_xxh32_u32(ty, i + 1u);
+		if (sv >= (0xFFFFFFFFu >> pl->y))
+			continue;
+
+		uint32_t pv = (sv >> 5) & ND_PLANT_MASK;
 		unsigned char cpln = 0;
-		if (v < (0xFFFFFFFFu >> pl->y) &&
-		    tmp < pl->tmp_max && tmp > pl->tmp_min &&
-		    rn < pl->rn_max && rn > pl->rn_min) {
-			uint32_t pv = (v >> 1) & ND_PLANT_MASK;
+		if (pl->big_col > 0) {
+			/* Trees: 2/3 mature canopy (cpln=2), 1/3 sapling (cpln=1) when pv != 0 */
+			if (pv == 3u)
+				cpln = 2u;
+			else
+				cpln = (unsigned char)pv;
+		} else {
 			if (pv != 3u)
 				cpln = (unsigned char)pv;
 		}
-		if (cpln) {
-			*idc++ = refs ? refs[i] : i;
-			pdn = (pdn << 2) | (cpln & 3u);
-		}
-		v >>= 8;
-	}
-	if (idc < &pd->id[3])
-		pd->max = (unsigned char)*idc;
-	pd->n = (unsigned char)pdn;
+		if (!cpln)
+			continue;
 
-	unsigned char apln[3] = {
-		(unsigned char)(pd->n & 3u),
-		(unsigned char)((pd->n >> 2) & 3u),
-		(unsigned char)((pd->n >> 4) & 3u),
-	};
+		uint32_t prio = nd_xxh32_u32(sv, tm ^ (i * 0x9E3779B9u));
+		/* Favor canopy trees in forest slots while keeping understory diversity */
+		if (pl->big_col > 0)
+			prio |= 0x80000000u;
+
+		cand_id[cand_n] = refs ? refs[i] : i;
+		cand_sz[cand_n] = cpln;
+		cand_prio[cand_n] = prio;
+		cand_n++;
+	}
+
+	/* Select up to 3 highest-priority matching species for the tile's 3 slots */
+	unsigned take = (cand_n < 3u) ? cand_n : 3u;
+	unsigned char apln[3] = { 0, 0, 0 };
+	for (unsigned s = 0; s < take; s++) {
+		unsigned best = s;
+		for (unsigned j = s + 1u; j < cand_n; j++) {
+			if (cand_prio[j] > cand_prio[best])
+				best = j;
+		}
+		if (best != s) {
+			unsigned tid = cand_id[s]; cand_id[s] = cand_id[best]; cand_id[best] = tid;
+			unsigned char tsz = cand_sz[s]; cand_sz[s] = cand_sz[best]; cand_sz[best] = tsz;
+			uint32_t tpr = cand_prio[s]; cand_prio[s] = cand_prio[best]; cand_prio[best] = tpr;
+		}
+		pd->id[s] = cand_id[s];
+		apln[s] = (unsigned char)(cand_sz[s] & 3u);
+	}
+	if (take < 3u)
+		pd->max = (unsigned char)take;
+
 	uint32_t shuf_v = ~(ty >> 8);
 	for (unsigned char i = 1; i < 3; i++) {
 		if (shuf_v & i)
@@ -137,6 +197,31 @@ nd_plant_slot_glyph(const plant_tile_t *pd, unsigned side, uint8_t *out_glyph, u
 	const nd_plant_spec_t *pl = &s_nd_plant_specs[pd->id[side]];
 	if (out_glyph) *out_glyph = (uint8_t)(sz > ND_PLANT_HALF ? pl->big : pl->small);
 	if (out_fg)    *out_fg    = pl->fg;
+	return 1;
+}
+
+static inline int
+nd_plant_slot_meta(const plant_tile_t *pd, unsigned side, int32_t rx, int32_t ry,
+                   int spec_idx_override, uint8_t *out_plant_id, uint8_t *out_col_mask)
+{
+	if (!pd || side >= 3)
+		return 0;
+	unsigned char sz = (unsigned char)ND_PLANT_N(pd->n, side);
+	if (!sz)
+		return 0;
+	int idx = (spec_idx_override >= 0) ? spec_idx_override :
+	          (pd->id[side] < ND_PLANT_MAX ? (int)pd->id[side] : -1);
+	if (idx < 0 || idx >= (int)ND_PLANT_MAX)
+		return 0;
+	const nd_plant_spec_t *sp = &s_nd_plant_specs[idx];
+	unsigned is_big = (sz > ND_PLANT_HALF) ? 1u : 0u;
+	unsigned max_v = is_big ? sp->big_art : sp->small_art;
+	uint32_t vhash = nd_xxh32_u32((uint32_t)(rx * 73856093 ^ ry * 19349663 ^ (int32_t)side), ND_PLANTS_SEED);
+	unsigned var0 = (max_v > 1u) ? (vhash % max_v) : 0u;
+	if (out_plant_id)
+		*out_plant_id = ND_PLANT_PACK_ID((unsigned)idx, is_big, var0);
+	if (out_col_mask)
+		*out_col_mask = is_big ? sp->big_col : sp->small_col;
 	return 1;
 }
 
