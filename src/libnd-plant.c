@@ -165,8 +165,8 @@ static inline unsigned plant_skel_add(
 		.tmp_min = tmp_min, .tmp_max = tmp_max,
 		.rn_min = rn_min, .rn_max = rn_max,
 		.y = y,
-		.small_art = small_art ? small_art : 4,
-		.big_art = big_art ? big_art : 4,
+		.small_art = small_art ? small_art : 2,
+		.big_art = big_art ? big_art : 2,
 		.small_col = small_col,
 		.big_col = big_col,
 		.spec_idx = (uint8_t)(spec_idx >= 0 ? spec_idx : (int)gen_plant_n),
@@ -273,7 +273,7 @@ XY_IMPL(int, on_add, unsigned, ref, unsigned, type, uint64_t, v)
 	object_drop(ref, obj.skid);
 	unsigned stage_max = (pla->size > PLANT_HALF) ? spla->big_art : spla->small_art;
 	if (!stage_max)
-		stage_max = skel.max_art ? skel.max_art : 4;
+		stage_max = 2;
 	obj.art_id = 1 + (unsigned)((v & 0xf) % stage_max);
 
 	nd_put(HD_OBJ, &ref, &obj);
@@ -298,7 +298,7 @@ plant_art_decorate(unsigned ref, unsigned type, char *buf, size_t len)
 	const char *stage = (pla->size > PLANT_HALF) ? "big" : "small";
 	unsigned stage_max = (pla->size > PLANT_HALF) ? spla->big_art : spla->small_art;
 	if (!stage_max)
-		stage_max = 4;
+		stage_max = 2;
 	unsigned art_id = obj.art_id ? ((obj.art_id - 1u) % stage_max) + 1u : 1u;
 
 	char slug[32];

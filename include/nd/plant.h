@@ -48,13 +48,13 @@ nd_xxh32_u32(uint32_t val, uint32_t seed)
 /* Packed per-slot wire byte (nd_map_tile_t.plant_id[s]):
  * bits 0..4: 1-based species index (1..16, 0 = none)
  * bit 5:     growth stage (0 = small, 1 = big)
- * bits 6..7: art variant index (0..3 -> variants 1..4) */
+ * bit 6:     art variant index (0..1 -> variants 1..2) */
 #define ND_PLANT_PACK_ID(idx, big, var0) \
-	((uint8_t)((((idx) + 1u) & 0x1Fu) | ((big) ? 0x20u : 0u) | (((var0) & 3u) << 6)))
+	((uint8_t)((((idx) + 1u) & 0x1Fu) | ((big) ? 0x20u : 0u) | (((var0) & 1u) << 6)))
 #define ND_PLANT_UNPACK_PRESENT(pid) (((pid) & 0x1Fu) != 0u && (((pid) & 0x1Fu) <= ND_PLANT_MAX))
 #define ND_PLANT_UNPACK_IDX(pid)     ((unsigned)(((pid) & 0x1Fu) ? (((pid) & 0x1Fu) - 1u) : 0u))
 #define ND_PLANT_UNPACK_BIG(pid)     ((unsigned)(((pid) >> 5) & 1u))
-#define ND_PLANT_UNPACK_VAR(pid)     ((unsigned)((((pid) >> 6) & 3u) + 1u))
+#define ND_PLANT_UNPACK_VAR(pid)     ((unsigned)((((pid) >> 6) & 1u) + 1u))
 
 typedef struct {
 	int16_t     tmp_min, tmp_max;
@@ -70,22 +70,22 @@ typedef struct {
 
 /* Canonical 16-species envelope table matching external/nd-plant/data/plants.dsv */
 static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
-	/* 0  */ {  10,  78,  50, 1024,  2, 'x', 'X', 10, 4, 4, 1, 1, "pinus sylvestris",         "pinus_sylvestris" },
-	/* 1  */ {  15,  92, 160,  380,  2, 't', 'T', 10, 4, 4, 1, 1, "pseudotsuga menziesii",    "pseudotsuga_menziesii" },
-	/* 2  */ {  25, 116,  30,  385,  2, 'x', 'X',  3, 4, 4, 1, 1, "betula pendula",           "betula_pendula" },
-	/* 3  */ {  30,  95,  20,  341,  6, 'x', 'X',  3, 4, 4, 0, 0, "linum usitatissimum",      "linum_usitatissimum" },
-	/* 4  */ {  35, 125, 240,  900,  2, 'x', 'X',  7, 4, 4, 1, 1, "betula pubescens",         "betula_pubescens" },
-	/* 5  */ { -40,  72,  80,  320,  2, 'a', 'A', 10, 4, 4, 1, 2, "abies alba",               "abies_alba" },
-	/* 6  */ { 105, 190,  10,  175,  3, 'i', 'I', 10, 4, 4, 1, 1, "arthrocereus rondonianus", "arthrocereus_rondonianus" },
-	/* 7  */ { 115, 168,  40,  290,  2, 't', 'T', 11, 4, 4, 1, 1, "acacia senegal",           "acacia_senegal" },
-	/* 8  */ {  38, 105,  80,  250,  4, 'x', 'X',  7, 4, 4, 0, 0, "daucus carota",            "daucus_carota" },
-	/* 9  */ {  50, 115,  80,  250,  4, 'x', 'X',  1, 4, 4, 0, 0, "solanum lycopersicum",     "solanum_lycopersicum" },
-	/* 10 */ {  45, 125,  60,  410,  1, 'x', 'X', 10, 4, 4, 1, 2, "quercus robur",            "quercus_robur" },
-	/* 11 */ {  40, 122, 150,  600,  2, 'w', 'W',  2, 4, 4, 1, 2, "salix babylonica",         "salix_babylonica" },
-	/* 12 */ {  38, 122,  70,  410,  1, 'x', 'X', 10, 4, 4, 1, 2, "acer pseudoplatanus",      "acer_pseudoplatanus" },
-	/* 13 */ {  75, 148,  20,  230,  3, 'v', 'V',  3, 4, 4, 1, 2, "olea europaea",            "olea_europaea" },
-	/* 14 */ {  30, 120,  40,  360,  4, 'f', 'F', 15, 4, 4, 0, 0, "bellis perennis",          "bellis_perennis" },
-	/* 15 */ {  25, 125, 180,  600,  4, 'r', 'R',  6, 4, 4, 0, 0, "typha latifolia",          "typha_latifolia" },
+	/* 0  */ {  10,  78,  50, 1024,  2, 'x', 'X', 10, 2, 2, 1, 1, "pinus sylvestris",         "pinus_sylvestris" },
+	/* 1  */ {  15,  92, 160,  380,  2, 't', 'T', 10, 2, 2, 1, 1, "pseudotsuga menziesii",    "pseudotsuga_menziesii" },
+	/* 2  */ {  25, 116,  30,  385,  2, 'x', 'X',  3, 2, 2, 1, 1, "betula pendula",           "betula_pendula" },
+	/* 3  */ {  30,  95,  20,  341,  6, 'x', 'X',  3, 2, 2, 0, 0, "linum usitatissimum",      "linum_usitatissimum" },
+	/* 4  */ {  35, 125, 240,  900,  2, 'x', 'X',  7, 2, 2, 1, 1, "betula pubescens",         "betula_pubescens" },
+	/* 5  */ { -40,  72,  80,  320,  2, 'a', 'A', 10, 2, 2, 1, 2, "abies alba",               "abies_alba" },
+	/* 6  */ { 105, 190,  10,  175,  3, 'i', 'I', 10, 2, 2, 1, 1, "arthrocereus rondonianus", "arthrocereus_rondonianus" },
+	/* 7  */ { 115, 168,  40,  290,  2, 't', 'T', 11, 2, 2, 1, 1, "acacia senegal",           "acacia_senegal" },
+	/* 8  */ {  38, 105,  80,  250,  4, 'x', 'X',  7, 2, 2, 0, 0, "daucus carota",            "daucus_carota" },
+	/* 9  */ {  50, 115,  80,  250,  4, 'x', 'X',  1, 2, 2, 0, 0, "solanum lycopersicum",     "solanum_lycopersicum" },
+	/* 10 */ {  45, 125,  60,  410,  1, 'x', 'X', 10, 2, 2, 1, 2, "quercus robur",            "quercus_robur" },
+	/* 11 */ {  40, 122, 150,  600,  2, 'w', 'W',  2, 2, 2, 1, 2, "salix babylonica",         "salix_babylonica" },
+	/* 12 */ {  38, 122,  70,  410,  1, 'x', 'X', 10, 2, 2, 1, 2, "acer pseudoplatanus",      "acer_pseudoplatanus" },
+	/* 13 */ {  75, 148,  20,  230,  3, 'v', 'V',  3, 2, 2, 1, 2, "olea europaea",            "olea_europaea" },
+	/* 14 */ {  30, 120,  40,  360,  4, 'f', 'F', 15, 2, 2, 0, 0, "bellis perennis",          "bellis_perennis" },
+	/* 15 */ {  25, 125, 180,  600,  4, 'r', 'R',  6, 2, 2, 0, 0, "typha latifolia",          "typha_latifolia" },
 };
 
 static inline int

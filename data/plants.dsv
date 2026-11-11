@@ -3,19 +3,19 @@
 # bold: 1 or 0
 # drop: stick|carrot|tomato|none
 # small_col / big_col: ground-plane collision footprint relative to bottom-center (0,0) (0=walkable, 1=standard trunk, 2=wide trunk)
-pinus sylvestris|19|green|1|x|X|10|78|50|1024|2|stick|4|4|1|1
-pseudotsuga menziesii|21|green|1|t|T|15|92|160|380|2|stick|4|4|1|1
-betula pendula|14|yellow|0|x|X|25|116|30|385|2|stick|4|4|1|1
-linum usitatissimum|7|yellow|0|x|X|30|95|20|341|6|stick|4|4|0|0
-betula pubescens|0|white|0|x|X|35|125|240|900|2|stick|4|4|1|1
-abies alba|10|green|1|a|A|-40|72|80|320|2|stick|4|4|1|2
-arthrocereus rondonianus|9|green|1|i|I|105|190|10|175|3|stick|4|4|1|1
-acacia senegal|12|yellow|1|t|T|115|168|40|290|2|stick|4|4|1|1
-daucus carota|6|white|0|x|X|38|105|80|250|4|carrot|4|4|0|0
-solanum lycopersicum|11|red|0|x|X|50|115|80|250|4|tomato|4|4|0|0
-quercus robur|14|green|1|x|X|45|125|60|410|1|stick|4|4|1|2
-salix babylonica|14|green|0|w|W|40|122|150|600|2|stick|4|4|1|2
-acer pseudoplatanus|14|green|1|x|X|38|122|70|410|1|stick|4|4|1|2
-olea europaea|12|yellow|0|v|V|75|148|20|230|3|stick|4|4|1|2
-bellis perennis|7|white|1|f|F|30|120|40|360|4|none|4|4|0|0
-typha latifolia|7|cyan|0|r|R|25|125|180|600|4|stick|4|4|0|0
+pinus sylvestris|19|green|1|x|X|10|78|50|1024|2|stick|2|2|1|1
+pseudotsuga menziesii|21|green|1|t|T|15|92|160|380|2|stick|2|2|1|1
+betula pendula|14|yellow|0|x|X|25|116|30|385|2|stick|2|2|1|1
+linum usitatissimum|7|yellow|0|x|X|30|95|20|341|6|stick|2|2|0|0
+betula pubescens|0|white|0|x|X|35|125|240|900|2|stick|2|2|1|1
+abies alba|10|green|1|a|A|-40|72|80|320|2|stick|2|2|1|2
+arthrocereus rondonianus|9|green|1|i|I|105|190|10|175|3|stick|2|2|1|1
+acacia senegal|12|yellow|1|t|T|115|168|40|290|2|stick|2|2|1|1
+daucus carota|6|white|0|x|X|38|105|80|250|4|carrot|2|2|0|0
+solanum lycopersicum|11|red|0|x|X|50|115|80|250|4|tomato|2|2|0|0
+quercus robur|14|green|1|x|X|45|125|60|410|1|stick|2|2|1|2
+salix babylonica|14|green|0|w|W|40|122|150|600|2|stick|2|2|1|2
+acer pseudoplatanus|14|green|1|x|X|38|122|70|410|1|stick|2|2|1|2
+olea europaea|12|yellow|0|v|V|75|148|20|230|3|stick|2|2|1|2
+bellis perennis|7|white|1|f|F|30|120|40|360|4|none|2|2|0|0
+typha latifolia|7|cyan|0|r|R|25|125|180|600|4|stick|2|2|0|0
