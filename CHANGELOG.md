@@ -1,4 +1,17 @@
-## [1.1.0]
+## [Unreleased] (target: v1.0.4)
+
+### Added
+- **Expanded Botanical Species (`data/plants.dsv`, `src/libnd-plant.c`)**:
+  - Added 6 species (`quercus robur`, `salix babylonica`, `acer pseudoplatanus`, `olea europaea`, `bellis perennis`, and `typha latifolia`) to `data/plants.dsv` and `enum base_plant` (16 total species) and recalibrated temperature/rainfall envelopes.
+
+### Fixed
+- **Coastal Flora Transition & Tile Zero-Initialization (`src/libnd-plant.c`)**:
+  - Zero-initialized `plant_tile_t` in `plant_noise_decorate` (`memset(&pd, 0, sizeof(pd))`) and enabled flora generation across coastal water transitions (`he >= w || !r.is_water`).
+
+### Changed
+- Refactored `stllog` logging comments, removed `add-prefix` Makefile paths, and cleaned module dependencies.
+
+## [1.0.3]
 
 - **Declarative DSV Table (`data/plants.dsv`)**:
   - Exported 10 botanical species into declarative `data/plants.dsv` table.
@@ -16,7 +29,7 @@
   installed packages named in `.github/workflows/ci.yml`. The build now
   resolves `<nd/…>` the way a packager sees it.
 - **macOS: link with `-undefined dynamic_lookup`.** macOS `ld` rejects
-  undefined symbols in a shared library, but `WARN` needs `qsyslog` — an
+  undefined symbols in a shared library, but `WARN` needs `stllog` — an
   engine-provided function pointer resolved at `dlopen` time (Linux allows
   this by default). `-undefined dynamic_lookup` is the Darwin equivalent, set
   as `LDFLAGS-libnd-plant-Darwin` so no other platform is affected.

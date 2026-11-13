@@ -56,7 +56,12 @@ typedef struct plant_skel {
 	int16_t tmp_min, tmp_max;
 	uint16_t rn_min, rn_max;
 	unsigned y;
+	uint8_t small_art, big_art;
+	uint8_t small_col, big_col;
+	uint8_t spec_idx;
 } SPLA;
+
+_Static_assert(sizeof(SPLA) <= sizeof(((SKEL *)0)->data), "SPLA must fit in SKEL.data");
 
 // instance
 typedef struct {
@@ -75,6 +80,12 @@ enum base_plant {
 	PLANT_ACACIA_SENEGAL,
 	PLANT_DAUCUS_CAROTA,
 	PLANT_SOLANUM_LYCOPERSICUM,
+	PLANT_QUERCUS_ROBUR,
+	PLANT_SALIX_BABYLONICA,
+	PLANT_ACER_PSEUDOPLATANUS,
+	PLANT_OLEA_EUROPAEA,
+	PLANT_BELLIS_PERENNIS,
+	PLANT_TYPHA_LATIFOLIA,
 	PLANT_MAX,
 };
 
@@ -139,18 +150,26 @@ static inline unsigned plant_skel_add(
 		char small, char big, 
 		int16_t tmp_min, int16_t tmp_max,
 		uint16_t rn_min, uint16_t rn_max,
-		unsigned y, unsigned drop)
+		unsigned y, unsigned drop,
+		uint8_t small_art, uint8_t big_art,
+		uint8_t small_col, uint8_t big_col)
 {
 	SKEL skel = {
 		.max_art = max_art,
 		.type = type_plant,
 	};
+	int spec_idx = nd_plant_find_spec(name);
 	SPLA spla = {
 		.pi = { .fg = fg, .flags = pi_flags, },
 		.small = small, .big = big,
 		.tmp_min = tmp_min, .tmp_max = tmp_max,
 		.rn_min = rn_min, .rn_max = rn_max,
 		.y = y,
+		.small_art = small_art ? small_art : 2,
+		.big_art = big_art ? big_art : 2,
+		.small_col = small_col,
+		.big_col = big_col,
+		.spec_idx = (uint8_t)(spec_idx >= 0 ? spec_idx : (int)gen_plant_n),
 	};
 	unsigned id;
 
@@ -184,7 +203,8 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 		PLA *pplant = (PLA *) &plant.data;
 		pplant->plid = pd.id[i];
 		pplant->size = n;
-		unsigned ref = object_add(&plant, pd.id[i], where_ref, v);
+		uint64_t pv = (v & 0xffu) | ((uint64_t)(n & 3u) << 8) | ((uint64_t)pd.id[i] << 16);
+		unsigned ref = object_add(&plant, pd.id[i], where_ref, pv);
 		if (ref != NOTHING) {
 			OBJ saved;
 			if (nd_get(HD_OBJ, &saved, &ref) == 0) {
@@ -243,12 +263,52 @@ XY_IMPL(int, on_add, unsigned, ref, unsigned, type, uint64_t, v)
 	nd_get(HD_OBJ, &obj, &ref);
 	nd_get(HD_SKEL, &skel, &obj.skid);
 
+	PLA *pla = (PLA *) &obj.data;
+	SPLA *spla = (SPLA *) &skel.data;
+	if (pla->size == 0 && ((v >> 8) & 3u) != 0) {
+		pla->size = (unsigned)((v >> 8) & 3u);
+		pla->plid = (unsigned)(v >> 16);
+	}
+
 	object_drop(ref, obj.skid);
-	unsigned max = skel.max_art;
-	obj.art_id = max ? 1 + (v & 0xf) % max : 0;
+	unsigned stage_max = (pla->size > PLANT_HALF) ? spla->big_art : spla->small_art;
+	if (!stage_max)
+		stage_max = 2;
+	obj.art_id = 1 + (unsigned)((v & 0xf) % stage_max);
 
 	nd_put(HD_OBJ, &ref, &obj);
 	return 0;
+}
+
+static int
+plant_art_decorate(unsigned ref, unsigned type, char *buf, size_t len)
+{
+	OBJ obj;
+	SKEL skel;
+
+	if (type != type_plant || !buf || !len)
+		return 0;
+	if (nd_get(HD_OBJ, &obj, &ref) != 0)
+		return 0;
+	if (nd_get(HD_SKEL, &skel, &obj.skid) != 0)
+		return 0;
+
+	PLA *pla = (PLA *) &obj.data;
+	SPLA *spla = (SPLA *) &skel.data;
+	const char *stage = (pla->size > PLANT_HALF) ? "big" : "small";
+	unsigned stage_max = (pla->size > PLANT_HALF) ? spla->big_art : spla->small_art;
+	if (!stage_max)
+		stage_max = 2;
+	unsigned art_id = obj.art_id ? ((obj.art_id - 1u) % stage_max) + 1u : 1u;
+
+	char slug[32];
+	size_t i = 0;
+	for (; i < sizeof(slug) - 1 && skel.name[i]; i++)
+		slug[i] = (skel.name[i] == ' ') ? '_' : skel.name[i];
+	slug[i] = '\0';
+
+	snprintf(buf, len, "plant/%s/%s/%u.png", slug, stage, art_id);
+	return 1;
 }
 
 /* The on_icon co-implementation is now a decorator. nd-core owns on_icon and
@@ -279,116 +339,12 @@ plant_icon_decorate(struct icon i, unsigned ref, unsigned type,
 	return i;
 }
 
-static inline unsigned char
-plant_noise(unsigned *plid, coord_t tmp, ucoord_t rn, uint32_t v, unsigned plant_ref)
-{
-	SKEL skel;
-	nd_get(HD_SKEL, &skel, &plant_ref);
-	SPLA *pl = (SPLA *) &skel.data;
-
-        if (v >= (NOISE_MAX >> pl->y))
-                return 0;
-	/* if (((v >> 6) ^ (v >> 3) ^ v) & 1) */
-	/* 	return 0; */
-
-	if (tmp < pl->tmp_max && tmp > pl->tmp_min
-	    && rn < pl->rn_max && rn > pl->rn_min) {
-		*plid = plant_ref;
-		v = (v >> 1) & PLANT_MASK;
-		if (v == 3)
-			v = 0;
-                return v;
-	}
-
-	return 0;
-}
-
-static inline void
-plants_noise(plant_tile_t *pd, uint32_t ty, coord_t tmp, ucoord_t rn, unsigned n)
-{
-	uint32_t v = ty;
-	register int cpln;
-	unsigned *idc = pd->id;
-	unsigned ref;
-	unsigned pdn = 0;
-
-	for (int i = 0; i < PLANT_MAX; i++) {
-		if (idc >= &pd->id[n]) {
-			break;
-		}
-
-		ref = plant_refs[i];
-
-		if (!v)
-			v = XXH32((const char *) &ty, sizeof(ty), ref);
-
-		cpln = plant_noise(idc, tmp, rn, v, ref);
-
-		if (cpln) {
-			pdn = (pdn << 2) | (cpln & 3);
-			idc++;
-		}
-		v >>= 8;
-	}
-	pd->max = *idc;
-	pd->n = pdn;
-}
-
-static void
-plants_shuffle(plant_tile_t *pd, morton_t v)
-{
-        unsigned char apln[3] = {
-                pd->n & 3,
-                (pd->n >> 2) & 3,
-                (pd->n >> 4) & 3,
-        };
-	register unsigned char i;
-	unsigned aux, pdn = 0;
-
-        /* i < 3, not i <= 3: this is one bubble pass over a THREE-element
-	 * array, swapping adjacent pairs (0,1) then (1,2). The bound was `<= 3`,
-	 * so the third iteration read and wrote apln[3] -- one byte past a
-	 * 3-byte stack array -- and pd->id[3], one word past a 3-element
-	 * member. That 1-byte stack overflow is what tripped
-	 * __stack_chk_fail during the all-19 boot: vanilla's on_new_player
-	 * teleports the new player, st_room_at() generates noise, on_noise
-	 * reaches plants_shuffle(), and the engine died with
-	 * "*** stack smashing detected ***" before mcp_auth_success ever ran.
-	 * Latent in nd-plant since the initial commit (main.c) -- nothing
-	 * implemented on_noise, so the function had never run. */
-        for (i = 1; i < 3; i++) {
-		pdn = pdn << 2;
-
-                if (v & i)
-                        continue;
-
-                aux = pd->id[i - 1];
-                pd->id[i - 1] = pd->id[i];
-                pd->id[i] = aux;
-
-                aux = apln[i - 1];
-                apln[i - 1] = apln[i];
-                apln[i] = aux;
-        }
-
-	pd->n = apln[0] | (apln[1] << 2) | (apln[2] << 4);
-}
-
 static struct bio
 plant_noise_decorate(struct bio r, uint32_t he, uint32_t w, uint32_t tm, uint32_t cl)
 {
 	plant_tile_t pd;
-	pd.max = 0;
 	(void) cl;
-	if (he > w) {
-		r.ty = XXH32(&tm, sizeof(uint32_t), PLANTS_SEED);
-		plants_noise(&pd, r.ty, r.tmp, r.rn, 3);
-		plants_shuffle(&pd, ~(r.ty >> 8));
-	} else {
-		memset(pd.id, 0, sizeof(pd.id));
-		pd.n = 0;
-	}
-
+	r.ty = nd_plant_noise_eval(&pd, he, w, r.is_water, tm, r.tmp, r.rn, plant_refs);
 	memcpy(r.raw, &pd, sizeof(pd));
 	return r;
 }
@@ -525,8 +481,15 @@ plant_row(const char *const *f, size_t n, void *user)
 	else if (!strcmp(f[11], "tomato"))
 		drop = drops->tomato;
 
+	int spec_idx = nd_plant_find_spec(name);
+	uint8_t small_art = (n > 12) ? (uint8_t)atoi(f[12]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].small_art : 2);
+	uint8_t big_art   = (n > 13) ? (uint8_t)atoi(f[13]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].big_art   : 2);
+	uint8_t small_col = (n > 14) ? (uint8_t)atoi(f[14]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].small_col : 1);
+	uint8_t big_col   = (n > 15) ? (uint8_t)atoi(f[15]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].big_col   : 1);
+
 	plant_skel_add(name, max_art, fg, pi_flags, small, big,
-			tmp_min, tmp_max, rn_min, rn_max, y, drop);
+			tmp_min, tmp_max, rn_min, rn_max, y, drop,
+			small_art, big_art, small_col, big_col);
 	return 0;
 }
 
@@ -572,4 +535,5 @@ xy_install(void)
 	core_noise_decorate(plant_noise_decorate);
 	core_empty_tile_decorate(plant_empty_tile_decorate);
 	core_icon_decorate(plant_icon_decorate);
+	core_art_decorate(plant_art_decorate);
 }
