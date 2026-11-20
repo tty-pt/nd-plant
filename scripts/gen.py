@@ -29,10 +29,14 @@ TEXELS_PER_METRE = 45.0  # 1 upright lamb = 18 texels = 0.40 m -> 1 texel = 2.22
 AGENT_PIPELINE_CONTRACT = """
 CRITICAL AUTOMATED PIPELINE CONTRACT (MUST FOLLOW EXACTLY):
 1. Reference `lamb.png` if present for strict texel-scale and zero-black-outline discipline.
-2. Complete Step 1 (Botanical Research) and Step 3 (Exact Texel Calculations: H_tex = round(H * 45), W_tex = round(W * 45)).
+2. Complete Step 1 (Botanical Research) and Step 3 (Exact Texel Calculations: H_tex = round(H * 45), W_tex = round(W * 45)) for the requested growth stage ({stage}) and variant index ({variant}/3).
+   - Growth stage: {stage_desc}
+   - Variant {variant}: Produce a distinct natural morphological variation (branching silhouette, stem arrangement, flower/foliage distribution) from other variants.
 3. Write a valid JSON file to `{meta_json}` with these exact keys:
    {{
      "species": "{species}",
+     "stage": "{stage}",
+     "variant": {variant},
      "life_form": "<tree|shrub|herb|grass|reed|fern|clump>",
      "height_m": <float H in metres>,
      "width_m": <float W in metres>,
@@ -55,8 +59,27 @@ def slugify(species: str) -> str:
     return re.sub(r"[^a-z0-9]+", "_", species.strip().lower()).strip("_")
 
 
+def resolve_lamb_path(lamb_arg: Path | None) -> Path | None:
+    candidates = []
+    if lamb_arg:
+        candidates.extend([lamb_arg, Path.cwd() / lamb_arg, Path(__file__).resolve().parent.parent / lamb_arg.name])
+    candidates.extend([
+        Path("lamb.png"),
+        Path(__file__).resolve().parent.parent / "lamb.png",
+        Path(__file__).resolve().parent.parent.parent / "nd-seven" / "resources" / "lamb.png",
+        Path("/home/quirinpa/site/external/nd-plant/lamb.png"),
+        Path("/home/quirinpa/site/external/nd-seven/resources/lamb.png"),
+    ])
+    for c in candidates:
+        if c.exists():
+            return c.resolve()
+    return None
+
+
 def run_ultra_agent(
     species: str,
+    stage: str,
+    variant: int,
     template_path: Path,
     lamb_path: Path | None,
     raw_diffuse: Path,
@@ -75,11 +98,24 @@ def run_ultra_agent(
     else:
         prompt_body += f"\n\nSPECIES_NAME = {species}\n"
 
-    if lamb_path and lamb_path.exists():
-        prompt_body = f"@{lamb_path.as_posix()}\n" + prompt_body
+    stage_desc = (
+        "Young / juvenile / sapling stage: specimen has smaller stature, fewer branches/umbels/stems, "
+        "and juvenile foliage proportions (typically 50-70% of mature dimensions)."
+        if stage == "small"
+        else "Mature / full-grown stage: full canopy, thickest trunk/stems, and maximum floral/foliar development."
+    )
+    prompt_body += f"\n\nTARGET GROWTH STAGE: {stage.upper()} ({stage_desc})\n"
+    prompt_body += f"VARIANT ALLELE INDEX: {variant} of 3 (Distinct natural silhouette and branching angle from variants 1, 2, 3).\n"
+
+    resolved_lamb = resolve_lamb_path(lamb_path)
+    if resolved_lamb and resolved_lamb.exists():
+        prompt_body = f"@{resolved_lamb.as_posix()}\n" + prompt_body
 
     full_prompt = prompt_body + "\n" + AGENT_PIPELINE_CONTRACT.format(
         species=species,
+        stage=stage,
+        stage_desc=stage_desc,
+        variant=variant,
         meta_json=meta_json.as_posix(),
         raw_diffuse=raw_diffuse.as_posix(),
         raw_normal=raw_normal.as_posix(),
@@ -440,45 +476,72 @@ def extract_world_locked_rgba(
     return painted_w, painted_h
 
 
-def main() -> int:
-    ap = argparse.ArgumentParser(description="Strictly spec-compliant 1:1 world-space RGBA botanical sprite pipeline.")
-    ap.add_argument("species", help="Scientific species name, e.g. 'Betula pendula' or 'Daucus carota'")
-    ap.add_argument("-t", "--template", type=Path, default=Path("prompt_template.md"), help="Botanical spec markdown file")
-    ap.add_argument("-l", "--lamb", type=Path, default=Path("./../nd-seven/resources/lamb.png"), help="Reference lamb.png sprite")
-    ap.add_argument("-o", "--out-dir", type=Path, default=Path("assets/plants"), help="Output directory for RGBA PNGs")
-    ap.add_argument("--runner", choices=["agy", "pi"], default="agy", help="Ultra-authenticated CLI (default: agy)")
-    ap.add_argument("--model", default=None, help="Optional model override (e.g. antigravity/gemini-4-argon)")
-    ap.add_argument("--max-retries", type=int, default=1, help="Auto-retry if Regime A painted block count drifts > 60%% from H_tex")
-    ap.add_argument("--reprocess-only", action="store_true", help="Skip AI generation and re-extract existing _raw files")
-    args = ap.parse_args()
-
-    slug = slugify(args.species)
-    staging = args.out_dir / "_raw"
+def generate_one_variant(
+    species: str,
+    stage: str,
+    var_idx: int,
+    template_path: Path,
+    lamb_path: Path | None,
+    out_dir: Path,
+    runner: str = "agy",
+    model: str | None = None,
+    max_retries: int = 1,
+    reprocess_only: bool = False,
+) -> bool:
+    slug = slugify(species)
+    var_tag = f"{slug}_{stage}_{var_idx}"
+    staging = out_dir / "_raw"
     staging.mkdir(parents=True, exist_ok=True)
-    raw_diff = staging / f"{slug}_raw_diffuse.jpg"
-    raw_norm = staging / f"{slug}_raw_normal.jpg"
-    meta_json = staging / f"{slug}_meta.json"
-    out_prefix = args.out_dir / slug
+    raw_diff = staging / f"{var_tag}_raw_diffuse.jpg"
+    raw_norm = staging / f"{var_tag}_raw_normal.jpg"
+    meta_json = staging / f"{var_tag}_meta.json"
 
-    if args.reprocess_only:
+    # Save to canonical game paths:
+    # 1. assets/plants/<slug>/<stage>/<var_idx>
+    # 2. If art/plant/<slug>/<stage> exists or out_dir is assets/plants, copy to art/plant & htdocs/nd/art/plant
+    plant_out_dir = out_dir / slug / stage
+    plant_out_dir.mkdir(parents=True, exist_ok=True)
+    out_prefix = plant_out_dir / str(var_idx)
+
+    extra_targets = []
+    # If working inside nd-plant or site repo, sync to canonical game art dirs
+    repo_art_dir = Path(__file__).resolve().parent.parent / "art" / "plant" / slug / stage
+    site_htdocs_dir = Path(__file__).resolve().parent.parent.parent.parent / "htdocs" / "nd" / "art" / "plant" / slug / stage
+    if repo_art_dir.parent.parent.exists():
+        extra_targets.append(repo_art_dir / str(var_idx))
+    if site_htdocs_dir.parent.parent.exists():
+        extra_targets.append(site_htdocs_dir / str(var_idx))
+
+    if reprocess_only:
+        if not meta_json.exists():
+            print(f"[skip] Missing metadata {meta_json} for {var_tag}")
+            return False
         meta = load_and_verify_meta(meta_json)
-        extract_world_locked_rgba(
-            raw_diff, raw_norm, out_prefix, meta["w_tex"], meta["h_tex"], bool(meta.get("has_purple_flowers", False))
+        w_tex, h_tex = meta["w_tex"], meta["h_tex"]
+        painted_w, painted_h = extract_world_locked_rgba(
+            raw_diff, raw_norm, out_prefix, w_tex, h_tex, bool(meta.get("has_purple_flowers", False))
         )
-        print(f"[done] Reprocessed {out_prefix}.png (+ _n.png) at exact {meta['w_tex']}x{meta['h_tex']} px.")
-        return 0
+        for target in extra_targets:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f"{out_prefix}.png", f"{target}.png")
+            if (Path(f"{out_prefix}_n.png")).exists():
+                shutil.copy2(f"{out_prefix}_n.png", f"{target}_n.png")
+        print(f"[done] Reprocessed {stage}/{var_idx}.png (+ _n.png) at exact {w_tex}x{h_tex} px.")
+        return True
 
     feedback = ""
-    for attempt in range(args.max_retries + 1):
+    for attempt in range(max_retries + 1):
         meta = run_ultra_agent(
-            species=args.species,
-            template_path=args.template,
-            lamb_path=args.lamb if args.lamb.exists() else None,
+            species=species,
+            stage=stage,
+            variant=var_idx,
+            template_path=template_path,
+            lamb_path=lamb_path,
             raw_diffuse=raw_diff,
             raw_normal=raw_norm,
             meta_json=meta_json,
-            runner=args.runner,
-            model=args.model,
+            runner=runner,
+            model=model,
             extra_feedback=feedback,
         )
 
@@ -492,27 +555,74 @@ def main() -> int:
             has_purple_flowers=bool(meta.get("has_purple_flowers", False)),
         )
 
-        # In Regime A (small plants), verify the AI didn't paint a 150-block macro close-up for a 36-texel herb
+        # In Regime A (small plants), verify the AI didn't paint a 150-block macro close-up
         ratio_h = painted_h / max(1, h_tex)
-        if max(w_tex, h_tex) <= 220 and (ratio_h > 1.60 or ratio_h < 0.60) and attempt < args.max_retries:
+        if max(w_tex, h_tex) <= 220 and (ratio_h > 1.60 or ratio_h < 0.60) and attempt < max_retries:
             feedback = (
                 f"Previous generation painted ~{painted_w}x{painted_h} discrete pixel blocks, "
                 f"which violates the target {w_tex}x{h_tex} texel grid ({meta['width_m']}m x {meta['height_m']}m). "
                 f"Draw MUCH {'larger/chunkier pixel blocks with wider #FF00FF margins' if ratio_h > 1.6 else 'finer pixel blocks'} "
                 f"so the plant spans ~{h_tex} discrete vertical blocks!"
             )
-            print(f"[retry {attempt+1}/{args.max_retries}] {feedback}")
+            print(f"[retry {attempt+1}/{max_retries}] {feedback}")
             raw_diff.unlink(missing_ok=True)
             raw_norm.unlink(missing_ok=True)
             continue
 
+        for target in extra_targets:
+            target.parent.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(f"{out_prefix}.png", f"{target}.png")
+            if (Path(f"{out_prefix}_n.png")).exists():
+                shutil.copy2(f"{out_prefix}_n.png", f"{target}_n.png")
+
         print(
-            f"[done] {args.species} ({meta['width_m']}m x {meta['height_m']}m = {meta['lamb_multiplier']}x lamb) -> "
+            f"[done] {species} ({stage}/{var_idx}) ({meta['width_m']}m x {meta['height_m']}m = {meta['lamb_multiplier']}x lamb) -> "
             f"exact {w_tex}x{h_tex} real RGBA px saved to {out_prefix}.png & {out_prefix}_n.png"
         )
-        break
+        return True
 
-    return 0
+    return False
+
+
+def main() -> int:
+    ap = argparse.ArgumentParser(description="Strictly spec-compliant 1:1 world-space RGBA botanical sprite pipeline.")
+    ap.add_argument("species", help="Scientific species name, e.g. 'Betula pendula' or 'Daucus carota'")
+    ap.add_argument("-t", "--template", type=Path, default=Path("prompt_template.md"), help="Botanical spec markdown file")
+    ap.add_argument("-l", "--lamb", type=Path, default=None, help="Reference lamb.png sprite (auto-detected if omitted)")
+    ap.add_argument("-o", "--out-dir", type=Path, default=Path("assets/plants"), help="Output directory for RGBA PNGs")
+    ap.add_argument("--runner", choices=["agy", "pi"], default="agy", help="Ultra-authenticated CLI (default: agy)")
+    ap.add_argument("--model", default=None, help="Optional model override (e.g. antigravity/gemini-4-argon)")
+    ap.add_argument("--stages", nargs="+", choices=["small", "big"], default=["small", "big"], help="Stages to generate (default: small big)")
+    ap.add_argument("--variants", nargs="+", type=int, default=[1, 2, 3], help="Variant indices to generate (default: 1 2 3)")
+    ap.add_argument("--max-retries", type=int, default=1, help="Auto-retry if Regime A painted block count drifts > 60%% from H_tex")
+    ap.add_argument("--reprocess-only", action="store_true", help="Skip AI generation and re-extract existing _raw files")
+    args = ap.parse_args()
+
+    success_count = 0
+    total_count = len(args.stages) * len(args.variants)
+
+    for stage in args.stages:
+        for var_idx in args.variants:
+            print(f"\n=======================================================")
+            print(f"Generating {args.species} [{stage.upper()}] Variant {var_idx} (1.png, 2.png, 3.png suite)")
+            print(f"=======================================================")
+            ok = generate_one_variant(
+                species=args.species,
+                stage=stage,
+                var_idx=var_idx,
+                template_path=args.template,
+                lamb_path=args.lamb,
+                out_dir=args.out_dir,
+                runner=args.runner,
+                model=args.model,
+                max_retries=args.max_retries,
+                reprocess_only=args.reprocess_only,
+            )
+            if ok:
+                success_count += 1
+
+    print(f"\n[pipeline finished] {success_count}/{total_count} sprites and normal maps generated successfully.")
+    return 0 if success_count == total_count else 1
 
 
 if __name__ == "__main__":

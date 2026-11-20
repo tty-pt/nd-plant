@@ -49,16 +49,17 @@
 #define PLANTS_SEED 5
 #define PLANT_N(pln, i) ((pln >> (i * 2)) & 3)
 
-// skel
+// skel (32 bytes max in SKEL.data)
 typedef struct plant_skel {
-	struct print_info pi;
-	char const small, big;
-	int16_t tmp_min, tmp_max;
-	uint16_t rn_min, rn_max;
-	unsigned y;
-	uint8_t small_art, big_art;
-	uint8_t small_col, big_col;
-	uint8_t spec_idx;
+	struct print_info pi;       /* 8 bytes */
+	char const small, big;      /* 2 bytes */
+	int16_t tmp_min, tmp_max;   /* 4 bytes */
+	uint16_t rn_min, rn_max;    /* 4 bytes */
+	uint8_t y;                  /* 1 byte  */
+	uint8_t small_art, big_art; /* 2 bytes */
+	uint8_t small_col, big_col; /* 2 bytes */
+	uint8_t spec_idx;           /* 1 byte  */
+	nd_plant_skel_genes_t genes;/* 8 bytes */
 } SPLA;
 
 _Static_assert(sizeof(SPLA) <= sizeof(((SKEL *)0)->data), "SPLA must fit in SKEL.data");
@@ -67,30 +68,11 @@ _Static_assert(sizeof(SPLA) <= sizeof(((SKEL *)0)->data), "SPLA must fit in SKEL
 typedef struct {
 	unsigned plid;
 	unsigned size;
+	uint32_t genome; /* Per-instance deterministic genetic & micro-climate seed */
 } PLA;
 
-enum base_plant {
-	PLANT_PINUS_SILVESTRIS,
-	PLANT_PSEUDOTSUGA_MENZIESII,
-	PLANT_BETULA_PENDULA,
-	PLANT_LINUM_USITATISSIMUM,
-	PLANT_BETULA_PUBESCENS,
-	PLANT_ABIES_ALBA,
-	PLANT_ARTHROCEREUS_RONDONIANUS,
-	PLANT_ACACIA_SENEGAL,
-	PLANT_DAUCUS_CAROTA,
-	PLANT_SOLANUM_LYCOPERSICUM,
-	PLANT_QUERCUS_ROBUR,
-	PLANT_SALIX_BABYLONICA,
-	PLANT_ACER_PSEUDOPLATANUS,
-	PLANT_OLEA_EUROPAEA,
-	PLANT_BELLIS_PERENNIS,
-	PLANT_TYPHA_LATIFOLIA,
-	PLANT_MAX,
-};
-
 static unsigned type_plant, act_chop;
-static unsigned plant_refs[PLANT_MAX];
+static unsigned plant_refs[ND_PLANT_MAX];
 static unsigned gen_plant_n = 0;
 
 static SKEL carrot = {
@@ -152,7 +134,8 @@ static inline unsigned plant_skel_add(
 		uint16_t rn_min, uint16_t rn_max,
 		unsigned y, unsigned drop,
 		uint8_t small_art, uint8_t big_art,
-		uint8_t small_col, uint8_t big_col)
+		uint8_t small_col, uint8_t big_col,
+		nd_plant_skel_genes_t genes)
 {
 	SKEL skel = {
 		.max_art = max_art,
@@ -164,12 +147,13 @@ static inline unsigned plant_skel_add(
 		.small = small, .big = big,
 		.tmp_min = tmp_min, .tmp_max = tmp_max,
 		.rn_min = rn_min, .rn_max = rn_max,
-		.y = y,
-		.small_art = small_art ? small_art : 2,
-		.big_art = big_art ? big_art : 2,
+		.y = (uint8_t)y,
+		.small_art = small_art ? small_art : ND_PLANT_VAR_MAX,
+		.big_art = big_art ? big_art : ND_PLANT_VAR_MAX,
 		.small_col = small_col,
 		.big_col = big_col,
 		.spec_idx = (uint8_t)(spec_idx >= 0 ? spec_idx : (int)gen_plant_n),
+		.genes = genes,
 	};
 	unsigned id;
 
@@ -180,7 +164,8 @@ static inline unsigned plant_skel_add(
 	if (drop != NOTHING)
 		nd_put(HD_ADROP, &id, &drop);
 
-	plant_refs[gen_plant_n] = id;
+	if (gen_plant_n < ND_PLANT_MAX)
+		plant_refs[gen_plant_n] = id;
 	gen_plant_n ++;
 	return id;
 }
@@ -203,7 +188,8 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 		PLA *pplant = (PLA *) &plant.data;
 		pplant->plid = pd.id[i];
 		pplant->size = n;
-		uint64_t pv = (v & 0xffu) | ((uint64_t)(n & 3u) << 8) | ((uint64_t)pd.id[i] << 16);
+		pplant->genome = nd_xxh32_u32((uint32_t)where_ref ^ ((uint32_t)i * 0x9E3779B9u) ^ (uint32_t)v, ND_PLANTS_SEED);
+		uint64_t pv = (v & 0xffu) | ((uint64_t)(n & 3u) << 8) | ((uint64_t)pd.id[i] << 16) | ((uint64_t)pplant->genome << 32);
 		unsigned ref = object_add(&plant, pd.id[i], where_ref, pv);
 		if (ref != NOTHING) {
 			OBJ saved;
@@ -211,6 +197,7 @@ _plants_add(unsigned where_ref, struct bio *bio, uint64_t v)
 				PLA *spla = (PLA *) &saved.data;
 				spla->plid = pd.id[i];
 				spla->size = n;
+				spla->genome = pplant->genome;
 				nd_put(HD_OBJ, &ref, &saved);
 			}
 			/* Sticks are placed inside the tree container by on_add() */
@@ -267,14 +254,16 @@ XY_IMPL(int, on_add, unsigned, ref, unsigned, type, uint64_t, v)
 	SPLA *spla = (SPLA *) &skel.data;
 	if (pla->size == 0 && ((v >> 8) & 3u) != 0) {
 		pla->size = (unsigned)((v >> 8) & 3u);
-		pla->plid = (unsigned)(v >> 16);
+		pla->plid = (unsigned)(v >> 16) & 0xFFFFu;
 	}
+	if (pla->genome == 0)
+		pla->genome = (uint32_t)(v >> 32) ? (uint32_t)(v >> 32) : nd_xxh32_u32(ref ^ (uint32_t)v, ND_PLANTS_SEED);
 
 	object_drop(ref, obj.skid);
 	unsigned stage_max = (pla->size > PLANT_HALF) ? spla->big_art : spla->small_art;
 	if (!stage_max)
-		stage_max = 2;
-	obj.art_id = 1 + (unsigned)((v & 0xf) % stage_max);
+		stage_max = ND_PLANT_VAR_MAX;
+	obj.art_id = 1 + (unsigned)((pla->genome ^ (uint32_t)(v & 0xffu)) % stage_max);
 
 	nd_put(HD_OBJ, &ref, &obj);
 	return 0;
@@ -298,7 +287,7 @@ plant_art_decorate(unsigned ref, unsigned type, char *buf, size_t len)
 	const char *stage = (pla->size > PLANT_HALF) ? "big" : "small";
 	unsigned stage_max = (pla->size > PLANT_HALF) ? spla->big_art : spla->small_art;
 	if (!stage_max)
-		stage_max = 2;
+		stage_max = ND_PLANT_VAR_MAX;
 	unsigned art_id = obj.art_id ? ((obj.art_id - 1u) % stage_max) + 1u : 1u;
 
 	char slug[32];
@@ -482,14 +471,37 @@ plant_row(const char *const *f, size_t n, void *user)
 		drop = drops->tomato;
 
 	int spec_idx = nd_plant_find_spec(name);
-	uint8_t small_art = (n > 12) ? (uint8_t)atoi(f[12]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].small_art : 2);
-	uint8_t big_art   = (n > 13) ? (uint8_t)atoi(f[13]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].big_art   : 2);
+	uint8_t small_art = (n > 12) ? (uint8_t)atoi(f[12]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].small_art : ND_PLANT_VAR_MAX);
+	uint8_t big_art   = (n > 13) ? (uint8_t)atoi(f[13]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].big_art   : ND_PLANT_VAR_MAX);
 	uint8_t small_col = (n > 14) ? (uint8_t)atoi(f[14]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].small_col : 1);
 	uint8_t big_col   = (n > 15) ? (uint8_t)atoi(f[15]) : (spec_idx >= 0 ? s_nd_plant_specs[spec_idx].big_col   : 1);
 
+	nd_plant_skel_genes_t genes = (spec_idx >= 0) ? s_nd_plant_specs[spec_idx].genes.skel : (nd_plant_skel_genes_t){
+		.foliage_type = ND_PLANT_FOLIAGE_BROADLEAF,
+		.bark_type = ND_PLANT_BARK_FISSURED,
+		.accent_type = ND_PLANT_ACCENT_NONE,
+		.stem_count = 1,
+		.trunk_r_pct = 55,
+		.clear_bole_pct = 30,
+		.apical_dom = 128,
+		.bough_count = 7,
+		.branch_pitch = 90,
+		.gnarl_weeping = 0x42,
+	};
+	if (n > 16) genes.foliage_type   = (uint8_t)(atoi(f[16]) & 0x0Fu);
+	if (n > 17) genes.bark_type      = (uint8_t)(atoi(f[17]) & 0x0Fu);
+	if (n > 18) genes.accent_type    = (uint8_t)(atoi(f[18]) & 0x0Fu);
+	if (n > 19) genes.stem_count     = (uint8_t)(atoi(f[19]) & 0x0Fu);
+	if (n > 20) genes.trunk_r_pct    = (uint8_t)atoi(f[20]);
+	if (n > 21) genes.clear_bole_pct = (uint8_t)atoi(f[21]);
+	if (n > 22) genes.apical_dom     = (uint8_t)atoi(f[22]);
+	if (n > 23) genes.bough_count    = (uint8_t)atoi(f[23]);
+	if (n > 24) genes.branch_pitch   = (uint8_t)atoi(f[24]);
+	if (n > 25) genes.gnarl_weeping  = (uint8_t)atoi(f[25]);
+
 	plant_skel_add(name, max_art, fg, pi_flags, small, big,
 			tmp_min, tmp_max, rn_min, rn_max, y, drop,
-			small_art, big_art, small_col, big_col);
+			small_art, big_art, small_col, big_col, genes);
 	return 0;
 }
 

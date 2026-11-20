@@ -48,45 +48,211 @@ nd_xxh32_u32(uint32_t val, uint32_t seed)
 /* Packed per-slot wire byte (nd_map_tile_t.plant_id[s]):
  * bits 0..4: 1-based species index (1..16, 0 = none)
  * bit 5:     growth stage (0 = small, 1 = big)
- * bit 6:     art variant index (0..1 -> variants 1..2) */
+ * bits 6..7: art / skeletal allele variant index (0..3 -> variants 1..4) */
+#define ND_PLANT_VAR_MAX 4u
 #define ND_PLANT_PACK_ID(idx, big, var0) \
-	((uint8_t)((((idx) + 1u) & 0x1Fu) | ((big) ? 0x20u : 0u) | (((var0) & 1u) << 6)))
+	((uint8_t)((((idx) + 1u) & 0x1Fu) | ((big) ? 0x20u : 0u) | (((var0) & 3u) << 6)))
 #define ND_PLANT_UNPACK_PRESENT(pid) (((pid) & 0x1Fu) != 0u && (((pid) & 0x1Fu) <= ND_PLANT_MAX))
 #define ND_PLANT_UNPACK_IDX(pid)     ((unsigned)(((pid) & 0x1Fu) ? (((pid) & 0x1Fu) - 1u) : 0u))
 #define ND_PLANT_UNPACK_BIG(pid)     ((unsigned)(((pid) >> 5) & 1u))
-#define ND_PLANT_UNPACK_VAR(pid)     ((unsigned)((((pid) >> 6) & 1u) + 1u))
+#define ND_PLANT_UNPACK_VAR(pid)     ((unsigned)((((pid) >> 6) & 3u) + 1u))
+
+/* Foliage organ morphology classes (driven by data in plants.dsv) */
+#define ND_PLANT_FOLIAGE_BROADLEAF 0u /* Layered broad-leaf sub-canopy frond clouds */
+#define ND_PLANT_FOLIAGE_CONIFER   1u /* Whorled conifer boughs with lateral needle sprays */
+#define ND_PLANT_FOLIAGE_WEEPING   2u /* Pendulous cascading willow frond curtains */
+#define ND_PLANT_FOLIAGE_CACTUS    3u /* Ribbed xerophytic column with areole spine tufts */
+#define ND_PLANT_FOLIAGE_HERB      4u /* Compound pinnate/bushy herbaceous foliage */
+#define ND_PLANT_FOLIAGE_ROSETTE   5u /* Basal ground rosette with erect floral scapes */
+#define ND_PLANT_FOLIAGE_REED      6u /* Sheathing upright linear sword-blades */
+
+/* Bark / stem surface classes */
+#define ND_PLANT_BARK_FISSURED 0u /* Deep furrowed rough hardwood/conifer bark */
+#define ND_PLANT_BARK_SCOTS    1u /* Dark lower plates transitioning to flaky salmon-ochre upper bark */
+#define ND_PLANT_BARK_BIRCH    2u /* Papery white/silver periderm with dark lenticel bands & basal chevrons */
+#define ND_PLANT_BARK_FLUTED   3u /* Ancient twisted/knotted Mediterranean corded bark */
+#define ND_PLANT_BARK_RIBBED   4u /* Fluted chlorophyllous succulent stem */
+#define ND_PLANT_BARK_HERB     5u /* Fibrous green herbaceous stalk */
+
+/* Reproductive / floral accent organ classes */
+#define ND_PLANT_ACCENT_NONE     0u /* Pure foliage & timber */
+#define ND_PLANT_ACCENT_CONE     1u /* Upright cylindrical fir seed cones on upper whorls */
+#define ND_PLANT_ACCENT_RAY      2u /* Marginal ray florets around a golden disc capitulum */
+#define ND_PLANT_ACCENT_UMBEL    3u /* Compound flat-topped white umbel inflorescences */
+#define ND_PLANT_ACCENT_BERRY    4u /* Globose berry clusters + yellow star blossoms */
+#define ND_PLANT_ACCENT_CACTUS   5u /* Nocturnal white-pink funnelform pericarpel blooms */
+#define ND_PLANT_ACCENT_SPADIX   6u /* Velvety dark-brown cylindrical female cattail spadix + golden spike */
+
+/* Compact 8-byte structural genome embedded directly inside SKEL.data (SPLA) */
+typedef struct {
+	uint8_t foliage_type : 4; /* ND_PLANT_FOLIAGE_* */
+	uint8_t bark_type    : 4; /* ND_PLANT_BARK_* */
+	uint8_t accent_type  : 4; /* ND_PLANT_ACCENT_* */
+	uint8_t stem_count   : 4; /* Primary basal trunks/culms (1..8) */
+	uint8_t trunk_r_pct;      /* Basal trunk radius in тысячных (per-mille) of crown width */
+	uint8_t clear_bole_pct;   /* Clear trunk height % before primary scaffold/whorl (5..85) */
+	uint8_t apical_dom;       /* Apical dominance: 0 = sympodial fork, 255 = monopodial spire */
+	uint8_t bough_count;      /* Primary scaffold boughs or conifer whorl tiers (2..14) */
+	uint8_t branch_pitch;     /* Branch emergence pitch: 0 = upright, 128 = horizontal, 220 = drooping */
+	uint8_t gnarl_weeping;    /* High nibble (0..15): trunk tortuosity/gnarl; Low nibble (0..15): weeping droop */
+} nd_plant_skel_genes_t;
+
+/* Complete data-driven morphological & colorimetric genome per species */
+typedef struct {
+	uint16_t small_w, small_h; /* Sapling / young stage metric bounds in world units */
+	uint16_t big_w,   big_h;   /* Mature stage metric bounds in world units */
+	nd_plant_skel_genes_t skel;/* 8-byte structural skeleton genes (also stored in SPLA) */
+	uint8_t  crown_flatness;   /* Sub-crown vertical aspect % (22 = flat umbrella, 100 = spherical, 140 = columnar) */
+	uint8_t  leaf_porosity;    /* Canopy gap / leaf-tip cutout porosity % (15..75) */
+	uint8_t  bark_dark[3],   bark_mid[3],   bark_light[3];
+	uint8_t  leaf_deep[3],   leaf_mid[3],   leaf_lit[3],  leaf_high[3];
+	uint8_t  accent_dark[3], accent_lit[3];
+} nd_plant_genes_t;
 
 typedef struct {
-	int16_t     tmp_min, tmp_max;
-	uint16_t    rn_min, rn_max;
-	uint8_t     y;
-	char        small, big;
-	uint8_t     fg;
-	uint8_t     small_art, big_art;
-	uint8_t     small_col, big_col;
-	uint16_t    crown_w; /* Mature overstory crown diameter in world units (0 for understory herbs) */
-	const char *name;
-	const char *slug;
+	int16_t          tmp_min, tmp_max;
+	uint16_t         rn_min, rn_max;
+	uint8_t          y;
+	char             small, big;
+	uint8_t          fg;
+	uint8_t          small_art, big_art;
+	uint8_t          small_col, big_col;
+	uint16_t         crown_w; /* Mature overstory crown diameter in world units (0 for understory herbs) */
+	const char      *name;
+	const char      *slug;
+	nd_plant_genes_t genes;
 } nd_plant_spec_t;
 
-/* Canonical 16-species envelope table matching external/nd-plant/data/plants.dsv */
+/* Canonical 16-species envelope & genetic table matching external/nd-plant/data/plants.dsv */
 static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
-	/* 0  */ { -36,  54, 140,  515,  2, 'x', 'X', 10, 2, 2, 1, 1, 140, "pinus sylvestris",         "pinus_sylvestris" },
-	/* 1  */ {  -8,  54, 240,  515,  2, 't', 'T', 10, 2, 2, 1, 1, 190, "pseudotsuga menziesii",    "pseudotsuga_menziesii" },
-	/* 2  */ { -28,  54, 180,  480,  2, 'x', 'X',  3, 2, 2, 1, 1, 140, "betula pendula",           "betula_pendula" },
-	/* 3  */ { -15, 115,  20,  420,  5, 'x', 'X',  3, 2, 2, 0, 0,   0, "linum usitatissimum",      "linum_usitatissimum" },
-	/* 4  */ { -36,  54, 250,  515,  2, 'x', 'X',  7, 2, 2, 1, 1, 140, "betula pubescens",         "betula_pubescens" },
-	/* 5  */ { -37,  36, 245,  515,  2, 'a', 'A', 10, 2, 2, 1, 2, 190, "abies alba",               "abies_alba" },
-	/* 6  */ {  65, 115,   0,  145,  3, 'i', 'I', 10, 2, 2, 1, 1, 160, "arthrocereus rondonianus", "arthrocereus_rondonianus" },
-	/* 7  */ {  65, 115,  35,  515,  1, 't', 'T', 11, 2, 2, 1, 1, 270, "acacia senegal",           "acacia_senegal" },
-	/* 8  */ {  10, 115,  85,  360,  4, 'x', 'X',  7, 2, 2, 0, 0,   0, "daucus carota",            "daucus_carota" },
-	/* 9  */ {  34, 115,  80,  460,  4, 'x', 'X',  1, 2, 2, 0, 0,   0, "solanum lycopersicum",     "solanum_lycopersicum" },
-	/* 10 */ {  30,  65, 220,  460,  1, 'x', 'X', 10, 2, 2, 1, 2, 240, "quercus robur",            "quercus_robur" },
-	/* 11 */ {  24, 115, 240,  515,  1, 'w', 'W',  2, 2, 2, 1, 2, 240, "salix babylonica",         "salix_babylonica" },
-	/* 12 */ {  28,  65, 250,  515,  1, 'x', 'X', 10, 2, 2, 1, 2, 240, "acer pseudoplatanus",      "acer_pseudoplatanus" },
-	/* 13 */ {  30, 115, 110,  515,  2, 'v', 'V',  3, 2, 2, 1, 2, 190, "olea europaea",            "olea_europaea" },
-	/* 14 */ { -24, 115,  40,  480,  3, 'f', 'F', 15, 2, 2, 0, 0,   0, "bellis perennis",          "bellis_perennis" },
-	/* 15 */ { -10, 115, 250,  515,  2, 'r', 'R',  6, 2, 2, 0, 0,   0, "typha latifolia",          "typha_latifolia" },
+	/* 0: Pinus sylvestris (Scots pine — high bare flaky salmon-ochre trunk, irregular umbrella-domed upper pine crown) */
+	{ -36,  54, 140,  515,  2, 'x', 'X', 10, 4, 4, 1, 1, 140, "pinus sylvestris",         "pinus_sylvestris",
+	  { 52, 74, 112, 160,
+	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_SCOTS, ND_PLANT_ACCENT_NONE, 1, 44, 58, 135, 7, 112, 0x82 },
+	    54, 48,
+	    { 54, 34, 24 }, { 124, 68, 42 }, { 196, 114, 66 },
+	    { 18, 44, 26 }, { 34, 74, 44 },  { 56, 108, 62 }, { 84, 142, 82 },
+	    { 76, 52, 34 }, { 122, 88, 56 } } },
+	/* 1: Pseudotsuga menziesii (Douglas fir — tall monopodial spire with sweeping layered needle boughs) */
+	{  -8,  54, 240,  515,  2, 't', 'T', 10, 4, 4, 1, 1, 190, "pseudotsuga menziesii",    "pseudotsuga_menziesii",
+	  { 54, 88, 116, 196,
+	    { ND_PLANT_FOLIAGE_CONIFER, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 52, 18, 248, 11, 138, 0x24 },
+	    45, 52,
+	    { 48, 30, 20 }, { 78, 50, 34 }, { 112, 74, 52 },
+	    { 14, 42, 24 }, { 26, 68, 38 }, { 46, 98, 54 }, { 76, 138, 74 },
+	    { 88, 56, 34 }, { 136, 92, 58 } } },
+	/* 2: Betula pendula (Silver birch — slender twin/single chalk-white trunk with dark lenticels & pendulous airy crown) */
+	{ -28,  54, 180,  480,  2, 'x', 'X',  3, 4, 4, 1, 1, 140, "betula pendula",           "betula_pendula",
+	  { 48, 70, 96, 146,
+	    { ND_PLANT_FOLIAGE_WEEPING, ND_PLANT_BARK_BIRCH, ND_PLANT_ACCENT_NONE, 2, 34, 34, 150, 7, 74, 0x5A },
+	    78, 58,
+	    { 42, 38, 36 }, { 184, 178, 170 }, { 238, 234, 226 },
+	    { 38, 68, 22 }, { 72, 116, 38 },   { 118, 164, 56 }, { 168, 208, 82 },
+	    { 112, 96, 36 }, { 168, 146, 62 } } },
+	/* 3: Linum usitatissimum (Common flax — clump of slender erect fibrous stems with sky-blue 5-petal blossoms) */
+	{ -15, 115,  20,  420,  5, 'x', 'X',  3, 4, 4, 0, 0,   0, "linum usitatissimum",      "linum_usitatissimum",
+	  { 16, 22, 24, 34,
+	    { ND_PLANT_FOLIAGE_HERB, ND_PLANT_BARK_HERB, ND_PLANT_ACCENT_RAY, 6, 32, 15, 210, 5, 48, 0x21 },
+	    85, 45,
+	    { 42, 72, 32 }, { 64, 106, 48 }, { 92, 142, 68 },
+	    { 36, 74, 32 }, { 58, 110, 48 }, { 86, 148, 68 }, { 118, 182, 92 },
+	    { 64, 108, 196 }, { 132, 182, 248 } } },
+	/* 4: Betula pubescens (Downy birch — multi-stemmed subarctic silver-grey birch with rounded ascending crown) */
+	{ -36,  54, 250,  515,  2, 'x', 'X',  7, 4, 4, 1, 1, 140, "betula pubescens",         "betula_pubescens",
+	  { 48, 66, 94, 134,
+	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_BIRCH, ND_PLANT_ACCENT_NONE, 3, 36, 26, 130, 7, 82, 0x63 },
+	    84, 50,
+	    { 54, 48, 44 }, { 154, 148, 140 }, { 208, 202, 194 },
+	    { 28, 58, 26 }, { 52, 96, 42 },    { 86, 138, 62 }, { 126, 178, 88 },
+	    { 96, 84, 38 }, { 144, 128, 64 } } },
+	/* 5: Abies alba (European silver fir — dense symmetrical pyramidal conifer with silver-backed needles & upright cones) */
+	{ -37,  36, 245,  515,  2, 'a', 'A', 10, 4, 4, 1, 2, 190, "abies alba",               "abies_alba",
+	  { 54, 84, 114, 186,
+	    { ND_PLANT_FOLIAGE_CONIFER, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_CONE, 1, 54, 14, 252, 10, 124, 0x12 },
+	    42, 48,
+	    { 52, 50, 48 }, { 88, 86, 82 }, { 128, 126, 122 },
+	    { 14, 38, 32 }, { 28, 64, 52 }, { 52, 98, 78 }, { 112, 158, 138 },
+	    { 92, 62, 38 }, { 148, 106, 68 } } },
+	/* 6: Arthrocereus rondonianus (Rondonia columnar cactus — ribbed xerophytic columns with golden spine areoles & nocturnal blooms) */
+	{  65, 115,   0,  145,  3, 'i', 'I', 10, 4, 4, 1, 1, 160, "arthrocereus rondonianus", "arthrocereus_rondonianus",
+	  { 26, 36, 42, 58,
+	    { ND_PLANT_FOLIAGE_CACTUS, ND_PLANT_BARK_RIBBED, ND_PLANT_ACCENT_CACTUS, 4, 95, 18, 220, 4, 52, 0x20 },
+	    135, 20,
+	    { 24, 58, 32 }, { 42, 92, 52 }, { 68, 132, 76 },
+	    { 22, 56, 30 }, { 40, 88, 48 }, { 64, 126, 72 }, { 188, 158, 78 },
+	    { 204, 116, 142 }, { 248, 232, 238 } } },
+	/* 7: Acacia senegal (Gum arabic tree — forked thorny trunk supporting flat tabular savannah umbrella strata) */
+	{  65, 115,  35,  515,  1, 't', 'T', 11, 4, 4, 1, 1, 270, "acacia senegal",           "acacia_senegal",
+	  { 76, 56, 162, 112,
+	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 38, 38, 42, 7, 106, 0xB2 },
+	    26, 56,
+	    { 62, 46, 30 }, { 102, 78, 52 }, { 146, 114, 78 },
+	    { 38, 58, 18 }, { 68, 96, 30 },  { 106, 138, 46 }, { 148, 178, 68 },
+	    { 196, 178, 88 }, { 242, 226, 138 } } },
+	/* 8: Daucus carota (Wild carrot / Queen Anne's lace — orange taproot crown, feathery tripinnate fronds & white compound umbels) */
+	{  10, 115,  85,  360,  4, 'x', 'X',  7, 4, 4, 0, 0,   0, "daucus carota",            "daucus_carota",
+	  { 18, 20, 28, 32,
+	    { ND_PLANT_FOLIAGE_HERB, ND_PLANT_BARK_HERB, ND_PLANT_ACCENT_UMBEL, 5, 48, 12, 160, 6, 72, 0x31 },
+	    64, 52,
+	    { 176, 78, 22 }, { 218, 108, 32 }, { 246, 142, 52 },
+	    { 28, 68, 26 },  { 52, 108, 42 },  { 82, 148, 64 }, { 118, 184, 88 },
+	    { 186, 192, 178 }, { 246, 248, 238 } } },
+	/* 9: Solanum lycopersicum (Tomato — sprawling sympodial vine bush with serrated compound leaflets & glossy red berries) */
+	{  34, 115,  80,  460,  4, 'x', 'X',  1, 4, 4, 0, 0,   0, "solanum lycopersicum",     "solanum_lycopersicum",
+	  { 22, 22, 34, 38,
+	    { ND_PLANT_FOLIAGE_HERB, ND_PLANT_BARK_HERB, ND_PLANT_ACCENT_BERRY, 3, 45, 16, 95, 7, 88, 0x62 },
+	    78, 42,
+	    { 34, 68, 24 }, { 56, 102, 38 }, { 82, 138, 56 },
+	    { 24, 62, 20 }, { 46, 98, 34 },  { 76, 138, 52 }, { 112, 174, 74 },
+	    { 184, 32, 22 }, { 242, 68, 44 } } },
+	/* 10: Quercus robur (English pedunculate oak — massive buttressed bole, gnarly widespreading limbs & billowing cumulus domes) */
+	{  30,  65, 220,  460,  1, 'x', 'X', 10, 4, 4, 1, 2, 240, "quercus robur",            "quercus_robur",
+	  { 64, 68, 152, 144,
+	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 72, 28, 58, 8, 98, 0xB2 },
+	    72, 44,
+	    { 42, 32, 24 }, { 74, 58, 44 }, { 108, 86, 66 },
+	    { 18, 48, 18 }, { 36, 82, 30 }, { 64, 122, 46 }, { 102, 162, 66 },
+	    { 96, 74, 36 }, { 142, 114, 58 } } },
+	/* 11: Salix babylonica (Weeping willow — stout furrowed leaning trunk, high arching scaffold ribs & long golden-green curtains) */
+	{  24, 115, 240,  515,  1, 'w', 'W',  2, 4, 4, 1, 2, 240, "salix babylonica",         "salix_babylonica",
+	  { 64, 66, 144, 132,
+	    { ND_PLANT_FOLIAGE_WEEPING, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 64, 30, 68, 8, 78, 0x7F },
+	    88, 54,
+	    { 48, 38, 28 }, { 82, 66, 50 }, { 116, 96, 74 },
+	    { 34, 68, 24 }, { 64, 114, 38 }, { 104, 162, 58 }, { 154, 206, 86 },
+	    { 118, 148, 54 }, { 168, 204, 88 } } },
+	/* 12: Acer pseudoplatanus (Sycamore maple — straight flaking grey-brown bole with dense opposite-branched ovoid dome) */
+	{  28,  65, 250,  515,  1, 'x', 'X', 10, 4, 4, 1, 2, 240, "acer pseudoplatanus",      "acer_pseudoplatanus",
+	  { 62, 68, 138, 142,
+	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 60, 32, 128, 8, 76, 0x41 },
+	    84, 38,
+	    { 54, 46, 38 }, { 92, 80, 68 }, { 132, 116, 102 },
+	    { 20, 54, 20 }, { 42, 92, 34 }, { 74, 136, 52 }, { 118, 178, 76 },
+	    { 112, 138, 48 }, { 162, 192, 78 } } },
+	/* 13: Olea europaea (European olive — ancient twisted fluted silver-grey trunk with gnarled scaffold & silvery-sage crown) */
+	{  30, 115, 110,  515,  2, 'v', 'V',  3, 4, 4, 1, 2, 190, "olea europaea",            "olea_europaea",
+	  { 56, 52, 114, 96,
+	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_FLUTED, ND_PLANT_ACCENT_NONE, 1, 78, 28, 45, 7, 94, 0xE2 },
+	    58, 46,
+	    { 52, 48, 42 }, { 94, 88, 78 }, { 142, 134, 122 },
+	    { 38, 56, 38 }, { 68, 94, 66 }, { 108, 138, 102 }, { 164, 192, 158 },
+	    { 54, 42, 58 }, { 96, 78, 102 } } },
+	/* 14: Bellis perennis (Common English daisy — spoon-shaped basal leaf rosette with leafless scapes & white-rayed flowerheads) */
+	{ -24, 115,  40,  480,  3, 'f', 'F', 15, 4, 4, 0, 0,   0, "bellis perennis",          "bellis_perennis",
+	  { 7, 4, 10, 6,
+	    { ND_PLANT_FOLIAGE_ROSETTE, ND_PLANT_BARK_HERB, ND_PLANT_ACCENT_RAY, 4, 40, 10, 180, 5, 42, 0x20 },
+	    65, 35,
+	    { 44, 78, 32 }, { 72, 116, 48 }, { 104, 152, 68 },
+	    { 28, 68, 24 }, { 52, 108, 40 }, { 84, 148, 62 }, { 118, 182, 86 },
+	    { 232, 182, 34 }, { 250, 246, 244 } } },
+	/* 15: Typha latifolia (Broadleaf cattail / bulrush — dense marsh stand of upright sword-leaves & dark-brown cigar spadices) */
+	{ -10, 115, 250,  515,  2, 'r', 'R',  6, 4, 4, 0, 0,   0, "typha latifolia",          "typha_latifolia",
+	  { 26, 38, 42, 62,
+	    { ND_PLANT_FOLIAGE_REED, ND_PLANT_BARK_HERB, ND_PLANT_ACCENT_SPADIX, 7, 36, 15, 240, 8, 28, 0x21 },
+	    130, 30,
+	    { 36, 68, 34 }, { 58, 104, 52 }, { 86, 142, 74 },
+	    { 24, 58, 32 }, { 46, 94, 52 },  { 74, 134, 76 }, { 108, 172, 102 },
+	    { 68, 38, 20 }, { 196, 162, 68 } } },
 };
 
 typedef struct {

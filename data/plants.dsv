@@ -1,21 +1,24 @@
-# name|max_art|color|bold|small|big|tmp_min|tmp_max|rn_min|rn_max|y|drop|small_art|big_art|small_col|big_col
+# name|max_art|color|bold|small|big|tmp_min|tmp_max|rn_min|rn_max|y|drop|small_art|big_art|small_col|big_col|foliage_type|bark_type|accent_type|stem_count|trunk_r_pct|clear_bole_pct|apical_dom|bough_count|branch_pitch|gnarl_weeping
 # color: black|red|yellow|green|cyan|blue|magenta|white
 # bold: 1 or 0
 # drop: stick|carrot|tomato|none
 # small_col / big_col: ground-plane collision footprint relative to bottom-center (0,0) (0=walkable, 1=standard trunk, 2=wide trunk)
-pinus sylvestris|19|green|1|x|X|-36|54|140|515|2|stick|2|2|1|1
-pseudotsuga menziesii|21|green|1|t|T|-8|54|240|515|2|stick|2|2|1|1
-betula pendula|14|yellow|0|x|X|-28|54|180|480|2|stick|2|2|1|1
-linum usitatissimum|7|yellow|0|x|X|-15|115|20|420|5|stick|2|2|0|0
-betula pubescens|0|white|0|x|X|-36|54|250|515|2|stick|2|2|1|1
-abies alba|10|green|1|a|A|-37|36|245|515|2|stick|2|2|1|2
-arthrocereus rondonianus|9|green|1|i|I|65|115|0|145|3|stick|2|2|1|1
-acacia senegal|12|yellow|1|t|T|65|115|35|515|1|stick|2|2|1|1
-daucus carota|6|white|0|x|X|10|115|85|360|4|carrot|2|2|0|0
-solanum lycopersicum|11|red|0|x|X|34|115|80|460|4|tomato|2|2|0|0
-quercus robur|14|green|1|x|X|30|65|220|460|1|stick|2|2|1|2
-salix babylonica|14|green|0|w|W|24|115|240|515|1|stick|2|2|1|2
-acer pseudoplatanus|14|green|1|x|X|28|65|250|515|1|stick|2|2|1|2
-olea europaea|12|yellow|0|v|V|30|115|110|515|2|stick|2|2|1|2
-bellis perennis|7|white|1|f|F|-24|115|40|480|3|none|2|2|0|0
-typha latifolia|7|cyan|0|r|R|-10|115|250|515|2|stick|2|2|0|0
+# foliage_type: 0=broadleaf, 1=conifer, 2=weeping, 3=cactus, 4=herb, 5=rosette, 6=reed
+# bark_type: 0=fissured, 1=scots_pine, 2=birch, 3=fluted_olive, 4=ribbed_cactus, 5=herb_stem
+# accent_type: 0=none, 1=fir_cone, 2=ray_flower, 3=umbel, 4=berry, 5=cactus_bloom, 6=cattail_spadix
+pinus sylvestris|19|green|1|x|X|-36|54|140|515|2|stick|4|4|1|1|0|1|0|1|44|58|135|7|112|130
+pseudotsuga menziesii|21|green|1|t|T|-8|54|240|515|2|stick|4|4|1|1|1|0|0|1|52|18|248|11|138|36
+betula pendula|14|yellow|0|x|X|-28|54|180|480|2|stick|4|4|1|1|2|2|0|2|34|34|150|7|74|90
+linum usitatissimum|7|yellow|0|x|X|-15|115|20|420|5|stick|4|4|0|0|4|5|2|6|32|15|210|5|48|33
+betula pubescens|0|white|0|x|X|-36|54|250|515|2|stick|4|4|1|1|0|2|0|3|36|26|130|7|82|99
+abies alba|10|green|1|a|A|-37|36|245|515|2|stick|4|4|1|2|1|0|1|1|54|14|252|10|124|18
+arthrocereus rondonianus|9|green|1|i|I|65|115|0|145|3|stick|4|4|1|1|3|4|5|4|95|18|220|4|52|32
+acacia senegal|12|yellow|1|t|T|65|115|35|515|1|stick|4|4|1|1|0|0|0|1|38|38|42|7|106|178
+daucus carota|6|white|0|x|X|10|115|85|360|4|carrot|4|4|0|0|4|5|3|5|48|12|160|6|72|49
+solanum lycopersicum|11|red|0|x|X|34|115|80|460|4|tomato|4|4|0|0|4|5|4|3|45|16|95|7|88|98
+quercus robur|14|green|1|x|X|30|65|220|460|1|stick|4|4|1|2|0|0|0|1|72|28|58|8|98|178
+salix babylonica|14|green|0|w|W|24|115|240|515|1|stick|4|4|1|2|2|0|0|1|64|30|68|8|78|127
+acer pseudoplatanus|14|green|1|x|X|28|65|250|515|1|stick|4|4|1|2|0|0|0|1|60|32|128|8|76|65
+olea europaea|12|yellow|0|v|V|30|115|110|515|2|stick|4|4|1|2|0|3|0|1|78|28|45|7|94|226
+bellis perennis|7|white|1|f|F|-24|115|40|480|3|none|4|4|0|0|5|5|2|4|40|10|180|5|42|32
+typha latifolia|7|cyan|0|r|R|-10|115|250|515|2|stick|4|4|0|0|6|5|6|7|36|15|240|8|28|33
