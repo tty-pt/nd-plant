@@ -31,9 +31,9 @@
 #include <string.h>
 #include <math.h>
 
-#define ND_FOL_ATLAS_SIZE   512
-#define ND_FOL_TILE_SIZE    256
-#define ND_FOL_MIP_LEVELS   8   /* 512 -> 256 -> 128 -> 64 -> 32 -> 16 -> 8 -> 4 (each 2x2 tile >= 2x2) */
+#define ND_FOL_ATLAS_SIZE   1024
+#define ND_FOL_TILE_SIZE    512
+#define ND_FOL_MIP_LEVELS   9   /* 1024 -> 512 -> 256 -> 128 -> 64 -> 32 -> 16 -> 8 -> 4 (each 2x2 tile >= 2x2) */
 
 static inline uint32_t nd_fa_hash(uint32_t x)
 {
@@ -67,7 +67,7 @@ static inline uint8_t nd_fa_u8(float v)
 	return (uint8_t)i;
 }
 
-/* Over-composite a botanical feature pixel into a 256x256 tile region of the 512x512 RGBA8 atlas */
+/* Over-composite a botanical feature pixel into a 512x512 tile region of the 1024x1024 RGBA8 atlas */
 static inline void nd_fa_blend_px(uint8_t *atlas, int ox, int oy, int px, int py,
                                   float shade, float bump, float wood, float alpha)
 {
@@ -75,11 +75,13 @@ static inline void nd_fa_blend_px(uint8_t *atlas, int ox, int oy, int px, int py
 	if (alpha <= 0.004f) return;
 	uint8_t *dst = atlas + (((oy + py) * ND_FOL_ATLAS_SIZE) + (ox + px)) * 4;
 	float da = (float)dst[3] * (1.0f / 255.0f);
+	/* Ambient occlusion darkening on underlying layers when a new leaf/needle overlaps them */
+	float over_occl = 1.0f - 0.14f * alpha * da;
 	float out_a = alpha + da * (1.0f - alpha);
 	if (out_a <= 1e-4f) return;
 	/* Straight-alpha compositing weighted by incoming alpha so interior detail stays crisp */
 	float w = alpha / out_a;
-	float dr = (float)dst[0] * (1.0f / 255.0f);
+	float dr = (float)dst[0] * (1.0f / 255.0f) * over_occl;
 	float dg = (float)dst[1] * (1.0f / 255.0f);
 	float db = (float)dst[2] * (1.0f / 255.0f);
 	if (da <= 0.004f) {
@@ -115,7 +117,7 @@ static inline void nd_fa_draw_twig(uint8_t *atlas, int ox, int oy,
 	if (min_y < 0) min_y = 0;
 	if (max_y >= ND_FOL_TILE_SIZE) max_y = ND_FOL_TILE_SIZE - 1;
 
-	float aa = 1.35f / S;
+	float aa = 1.25f / S;
 	for (int py = min_y; py <= max_y; py++) {
 		float fy = ((float)py + 0.5f) / S;
 		for (int px = min_x; px <= max_x; px++) {
@@ -134,8 +136,10 @@ static inline void nd_fa_draw_twig(uint8_t *atlas, int ox, int oy,
 			float a = 1.0f - nd_fa_smoothstep(rad - aa, rad + aa, d);
 			if (a <= 0.005f) continue;
 			float cyl = nd_fa_clampf(sd / fmaxf(rad, 1e-4f), -1.0f, 1.0f);
-			float shade = shade_mul * (0.62f + 0.24f * sqrtf(fmaxf(0.0f, 1.0f - cyl * cyl)) + 0.10f * tc);
-			float bump = 0.5f + 0.42f * cyl;
+			/* Bark micro-ring ridges along the woody twig */
+			float bark_ring = 0.05f * sinf(tc * len * 140.0f + cyl * 2.5f);
+			float shade = shade_mul * (0.58f + 0.28f * sqrtf(fmaxf(0.0f, 1.0f - cyl * cyl)) + 0.10f * tc + bark_ring);
+			float bump = 0.5f + 0.45f * cyl;
 			nd_fa_blend_px(atlas, ox, oy, px, py, shade, bump, 0.96f, a);
 		}
 	}
@@ -160,7 +164,7 @@ static inline void nd_fa_draw_needle(uint8_t *atlas, int ox, int oy,
 	if (min_y < 0) min_y = 0;
 	if (max_y >= ND_FOL_TILE_SIZE) max_y = ND_FOL_TILE_SIZE - 1;
 
-	float aa = 1.25f / S;
+	float aa = 1.15f / S;
 	for (int py = min_y; py <= max_y; py++) {
 		float fy = ((float)py + 0.5f) / S;
 		for (int px = min_x; px <= max_x; px++) {
@@ -179,9 +183,11 @@ static inline void nd_fa_draw_needle(uint8_t *atlas, int ox, int oy,
 			if (a <= 0.005f) continue;
 			float vn = nd_fa_clampf(v / fmaxf(w, 1e-4f), -1.0f, 1.0f);
 			float ridge = 1.0f - fabsf(vn);
-			float shade = shade_base * (0.76f + 0.26f * uc + 0.14f * ridge);
-			float bump = 0.5f + 0.38f * vn;
-			nd_fa_blend_px(atlas, ox, oy, px, py, shade, bump, 0.02f, a);
+			/* Glaucous stomatal band highlight along needle center & basal pulvinus cushion */
+			float pulvinus = (uc < 0.07f) ? (1.0f - uc / 0.07f) : 0.0f;
+			float shade = shade_base * (0.72f + 0.28f * uc + 0.16f * ridge * ridge);
+			float bump = 0.5f + 0.42f * vn;
+			nd_fa_blend_px(atlas, ox, oy, px, py, shade, bump, 0.02f + 0.65f * pulvinus, a);
 		}
 	}
 }
@@ -207,7 +213,7 @@ static inline void nd_fa_draw_leaf(uint8_t *atlas, int ox, int oy,
 	if (max_y >= ND_FOL_TILE_SIZE) max_y = ND_FOL_TILE_SIZE - 1;
 
 	float bend_dir = (nd_fa_rand01(seed + 11u) - 0.5f) * 0.18f * len;
-	float aa = 1.35f / S;
+	float aa = 1.20f / S;
 	for (int py = min_y; py <= max_y; py++) {
 		float fy = ((float)py + 0.5f) / S;
 		for (int px = min_x; px <= max_x; px++) {
@@ -219,22 +225,27 @@ static inline void nd_fa_draw_leaf(uint8_t *atlas, int ox, int oy,
 			float v = (rx * nx + ry * ny) - bend_dir * uc * (1.0f - uc);
 			float av = fabsf(v);
 
-			/* Silhouette half-width profile w(u) */
+			/* Silhouette half-width profile w(u) with petiole stem at base (uc < 0.09) */
 			float w;
-			if (mode == 0) {
-				/* Serrated ovate/elliptic leaf */
-				float base_prof = powf(fmaxf(0.0f, sinf(uc * 3.14159265f)), 0.72f) * (1.08f - 0.34f * uc);
-				float tooth = 1.0f + 0.075f * sinf(uc * 36.0f) * sinf(uc * 3.14159265f);
+			if (uc < 0.085f) {
+				w = max_w * (0.07f + 0.18f * (uc / 0.085f));
+			} else if (mode == 0) {
+				/* Serrated ovate/elliptic leaf (Birch / Beech / Alder) */
+				float ub = (uc - 0.085f) / 0.915f;
+				float base_prof = powf(fmaxf(0.0f, sinf(ub * 3.14159265f)), 0.70f) * (1.10f - 0.36f * ub);
+				float tooth = 1.0f + 0.085f * sinf(ub * 42.0f) * sinf(ub * 3.14159265f);
 				w = max_w * base_prof * tooth;
 			} else if (mode == 1) {
-				/* Deeply pinnately/palmately lobed leaf */
-				float env = powf(fmaxf(0.0f, sinf(uc * 3.14159265f)), 0.62f) * (0.95f + 0.25f * sinf(uc * 2.4f));
-				float lobe_wave = 0.68f + 0.36f * cosf((uc * 3.6f - 0.45f) * 6.2831853f);
-				float tip_lobe = (uc > 0.78f) ? (1.0f - 0.65f * ((uc - 0.78f) / 0.22f)) : 1.0f;
-				w = max_w * env * nd_fa_clampf(lobe_wave, 0.28f, 1.12f) * tip_lobe;
+				/* Deeply pinnately/palmately lobed leaf (Oak / Maple) */
+				float ub = (uc - 0.085f) / 0.915f;
+				float env = powf(fmaxf(0.0f, sinf(ub * 3.14159265f)), 0.60f) * (0.96f + 0.26f * sinf(ub * 2.4f));
+				float lobe_wave = 0.64f + 0.40f * cosf((ub * 3.8f - 0.42f) * 6.2831853f);
+				float tip_lobe = (ub > 0.78f) ? (1.0f - 0.65f * ((ub - 0.78f) / 0.22f)) : 1.0f;
+				w = max_w * env * nd_fa_clampf(lobe_wave, 0.24f, 1.14f) * tip_lobe;
 			} else {
 				/* Slender curving lanceolate blade / compound pinnule */
-				float env = powf(fmaxf(0.0f, sinf(uc * 3.14159265f)), 0.58f) * (1.10f - 0.55f * uc);
+				float ub = (uc - 0.06f) / 0.94f;
+				float env = powf(fmaxf(0.0f, sinf(fmaxf(0.0f, ub) * 3.14159265f)), 0.56f) * (1.12f - 0.56f * ub);
 				w = max_w * env;
 			}
 			float end_d = (u < 0.0f) ? (-u * len) : ((u > 1.0f) ? ((u - 1.0f) * len) : 0.0f);
@@ -247,17 +258,21 @@ static inline void nd_fa_draw_leaf(uint8_t *atlas, int ox, int oy,
 
 			float vn = (w > 1e-4f) ? nd_fa_clampf(v / w, -1.0f, 1.0f) : 0.0f;
 			float avn = fabsf(vn);
-			/* Raised central midrib + chevron lateral veins */
-			float midrib = expf(-avn * 18.0f) * (1.0f - 0.55f * uc);
+			/* Raised central midrib + primary & secondary chevron lateral venation */
+			float midrib = expf(-avn * 20.0f) * (1.0f - 0.52f * uc);
 			float vein_phase = (mode == 2)
-				? (avn * 16.0f)
-				: (uc * ((mode == 1) ? 7.5f : 11.0f) - avn * 2.4f);
-			float lat_vein = powf(0.5f + 0.5f * cosf(vein_phase * 6.2831853f), 5.0f) * (1.0f - avn * 0.7f) * 0.55f;
-			/* Subtle cup-fold across leaf blade & sunlit tip gradient */
-			float fold = (1.0f - avn * 0.28f) * (0.86f + 0.20f * uc);
-			float shade = shade_base * fold + midrib * 0.11f + lat_vein * 0.07f;
-			float bump = 0.5f + 0.34f * vn + ((vn >= 0.0f) ? -0.10f : 0.10f) * midrib + 0.08f * lat_vein;
-			float wood = (uc < 0.08f && avn < 0.22f) ? (0.45f * (1.0f - uc / 0.08f)) : 0.0f;
+				? (avn * 18.0f)
+				: (uc * ((mode == 1) ? 8.0f : 12.0f) - avn * 2.5f);
+			float lat_vein_cos = cosf(vein_phase * 6.2831853f);
+			float lat_vein_sin = sinf(vein_phase * 6.2831853f);
+			float lat_vein = powf(0.5f + 0.5f * lat_vein_cos, 5.0f) * (1.0f - avn * 0.65f) * 0.60f;
+			/* Inter-vein mesophyll pillowing (lamina domes slightly between lateral veins) */
+			float pillow = (0.5f - 0.5f * lat_vein_cos) * (1.0f - avn * 0.5f) * 0.08f;
+			/* Subtle cup-fold across leaf blade & sunlit tip/margin gradient */
+			float fold = (1.0f - avn * 0.26f) * (0.84f + 0.22f * uc) + pillow;
+			float shade = shade_base * fold + midrib * 0.12f + lat_vein * 0.08f;
+			float bump = 0.5f + 0.36f * vn + ((vn >= 0.0f) ? -0.12f : 0.12f) * midrib + 0.11f * lat_vein_sin * (1.0f - avn * 0.5f);
+			float wood = (uc < 0.095f && avn < 0.35f) ? (0.85f * (1.0f - uc / 0.095f)) : (midrib * 0.18f);
 			nd_fa_blend_px(atlas, ox, oy, px, py, shade, bump, wood, a);
 		}
 	}

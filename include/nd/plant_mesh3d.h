@@ -34,8 +34,8 @@
 #include <stdbool.h>
 #include <string.h>
 #include <math.h>
-#include <nd/plant.h>
-#include <nd/plant_foliage_atlas.h>
+#include "plant.h"
+#include "plant_foliage_atlas.h"
 
 #define ND_MESH3D_NONE        0u
 #define ND_MESH3D_PLANT_BASE  1u
@@ -545,9 +545,14 @@ nd_m3d_add_axis_spline_tube(nd_mesh3d_builder_t *b,
 				rib_deriv = -sinf(ang * 8.0f);
 				rib = 1.0f + 0.20f * rib_wave;
 			} else if (bark_type == ND_PLANT_BARK_FLUTED) {
-				rib = 1.0f + 0.16f * cosf(twist_ang * 3.0f + (float)(seed & 7u));
+				rib_wave  = cosf(twist_ang * 3.0f + (float)(seed & 7u));
+				rib_deriv = -0.45f * sinf(twist_ang * 3.0f + (float)(seed & 7u));
+				rib = 1.0f + 0.16f * rib_wave;
 			} else if (!is_lateral && flare > 1.02f) {
-				rib = 1.0f + 0.14f * cosf(ang * 4.0f + (float)(seed & 7u)) * (flare - 1.0f);
+				float fl_w = (flare - 1.0f);
+				rib_wave  = cosf(ang * 4.0f + (float)(seed & 7u));
+				rib_deriv = -0.60f * sinf(ang * 4.0f + (float)(seed & 7u)) * fl_w;
+				rib = 1.0f + 0.16f * rib_wave * fl_w;
 			} else {
 				rib = 1.0f + 0.04f * cosf(ang * 3.0f + t * 3.14f);
 			}
@@ -596,7 +601,8 @@ nd_m3d_add_axis_spline_tube(nd_mesh3d_builder_t *b,
 					col = nd_m3d_lerp_col(col_dark, col_mid, 0.30f + shade_t * 0.70f);
 				}
 			}
-			ring_verts[i][is] = nd_m3d_push_vert(b, vx, vy, vz, wind_w, nx, ny, nz, canopy_occl, col, ND_MAT3D_BARK);
+			float bark_mat = ND_MAT3D_BARK + (float)(bark_type & 7u) * 0.005f;
+			ring_verts[i][is] = nd_m3d_push_vert(b, vx, vy, vz, wind_w, nx, ny, nz, canopy_occl, col, bark_mat);
 		}
 	}
 	for (int i = 0; i < n_pts - 1; i++) {
@@ -712,22 +718,25 @@ nd_m3d_add_branchlet_card(nd_mesh3d_builder_t *b,
 		float pw_mid  = nd_m3d_pack_card_u_wind(u, raw_ww * 0.90f);
 		float pw_wing = nd_m3d_pack_card_u_wind(u, raw_ww);
 
-		float dm[3] = { cx - dome_cx, cy - dome_cy, (cz - dome_cz) * 1.15f + 2.0f };
+		float dm[3] = { cx - dome_cx, cy - dome_cy, (cz - dome_cz) * 1.18f + 2.4f };
 		nd_m3d_norm3(dm);
+		/* SpeedTree / Skyrim Spherized Cloud Normals:
+		 * 82% radial outward sub-crown dome normal + 18% local card camber normal so crossed cards
+		 * share a continuous 3D illumination gradient without planar intersection seams. */
 		float nm[3] = {
-			dm[0] * 0.72f + card_up[0] * 0.28f,
-			dm[1] * 0.72f + card_up[1] * 0.28f,
-			dm[2] * 0.72f + card_up[2] * 0.28f
+			dm[0] * 0.82f + card_up[0] * 0.18f,
+			dm[1] * 0.82f + card_up[1] * 0.18f,
+			dm[2] * 0.82f + card_up[2] * 0.18f
 		};
 		float nl[3] = {
-			nm[0] - side[0] * 0.28f,
-			nm[1] - side[1] * 0.28f,
-			nm[2] - side[2] * 0.28f
+			nm[0] - side[0] * 0.22f,
+			nm[1] - side[1] * 0.22f,
+			nm[2] - side[2] * 0.22f
 		};
 		float nr[3] = {
-			nm[0] + side[0] * 0.28f,
-			nm[1] + side[1] * 0.28f,
-			nm[2] + side[2] * 0.28f
+			nm[0] + side[0] * 0.22f,
+			nm[1] + side[1] * 0.22f,
+			nm[2] + side[2] * 0.22f
 		};
 
 		v_left[s]  = nd_m3d_push_vert(b, wx_l, wy_l, wz_l, pw_wing,
@@ -901,6 +910,27 @@ nd_m3d_add_terminal_shoot_fan(nd_mesh3d_builder_t *b,
 		                          ca, sa, pitch_cap,
 		                          card_len, rz * arc_scale, rz * drop_scale * 0.85f,
 		                          card_hw, rz * 0.12f, roll,
+		                          dome_cx, dome_cy, dome_cz,
+		                          fol_base,
+		                          col_deep, col_mid, col_lit, col_high, total_h);
+	}
+
+	/* Card 4: Oblique 55-deg camera volume-filler shingle (angled cross-fan so oblique sightlines never see flat card edges) */
+	{
+		uint32_t hc = nd_m3d_hash(seed + 313u);
+		float side_sign = (hc & 1u) ? 1.0f : -1.0f;
+		float ang = base_ang + side_sign * (0.42f + 0.35f * tabular_t);
+		float ca = cosf(ang), sa = sinf(ang);
+		float cx0 = ax - ca * (r_base * back_tuck * 0.65f);
+		float cy0 = ay - sa * (r_base * back_tuck * 0.65f);
+		float cz0 = az + rz * 0.08f;
+		float card_len = r_base * 1.02f;
+		float card_hw  = card_len * 0.56f;
+		float roll = -side_sign * (0.36f * (1.0f - 0.45f * tabular_t) + 0.12f);
+		nd_m3d_add_branchlet_card(b, cx0, cy0, cz0,
+		                          ca, sa, pitch_main * 1.15f + 0.06f * (1.0f - tabular_t),
+		                          card_len, rz * arc_scale * 1.05f, rz * drop_scale * 0.90f,
+		                          card_hw, rz * 0.14f, roll,
 		                          dome_cx, dome_cy, dome_cz,
 		                          fol_base,
 		                          col_deep, col_mid, col_lit, col_high, total_h);
@@ -1614,8 +1644,10 @@ plant_geometry_build(const PlantInstance *plant,
 				float spire_taper = 1.0f - plagiotropic_t * (1.0f - powf(fmaxf(0.18f, 1.04f - 0.80f * h_t), 0.78f));
 
 				/* Local branchlet cluster radius: compact enough (0.13..0.17 * w_total) to preserve
-				 * visible branch architecture and sky fenestrations between sub-crowns */
-				float base_rx_frac = 0.145f + 0.035f * tabular_t + 0.030f * plagiotropic_t;
+				 * visible branch architecture and sky fenestrations between sub-crowns, modulated by
+				 * 3D Beer-Lambert light-competition health (org->health) so sunlit outer crown flushes fuller. */
+				float light_scale = 0.86f + 0.22f * plant_clampf(org->health, 0.25f, 1.0f);
+				float base_rx_frac = (0.145f + 0.035f * tabular_t + 0.030f * plagiotropic_t) * light_scale;
 				float rx = w_total * base_rx_frac * spire_taper;
 				float ry = rx * (0.92f - 0.12f * tabular_t);
 				float rz = rx * plant_clampf(crown_flatness * 0.62f, 0.18f, 0.54f);

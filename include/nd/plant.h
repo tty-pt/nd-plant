@@ -15,8 +15,8 @@
 
 #include <stdint.h>
 #include <string.h>
-#include <nd/plant-types.h>
-#include <nd/plant_model.h>
+#include "plant-types.h"
+#include "plant_model.h"
 
 #define ND_PLANT_MAX   16u
 #define ND_PLANTS_SEED 5u
@@ -611,6 +611,6 @@ nd_plant_slot_meta(const plant_tile_t *pd, unsigned side, int32_t rx, int32_t ry
 	return 1;
 }
 
-#include <nd/plant_mesh3d.h>
+#include "plant_mesh3d.h"
 
 #endif /* !ND_PLANT_H */

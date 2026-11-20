@@ -2686,7 +2686,7 @@ plant_logistic_expansion(float f)
 	return plant_clampf((raw - lo) / (hi - lo), 0.0f, 1.0f);
 }
 
-/* Internal recursive axis expansion using coordinate-addressed topo_hash */
+/* Internal recursive axis expansion using coordinate-addressed topo_hash with Growth-Time 3D Light Competition */
 static inline void
 plant_sim_develop_axis_recursive(
 	PlantInstance *inst,
@@ -2703,6 +2703,10 @@ plant_sim_develop_axis_recursive(
 	PlantVec3 start_dir,
 	float inherited_foliage_eta,
 	float inherited_fruit_eta,
+	float local_light_at_apex,
+	float local_light_gradient_x,
+	float local_light_gradient_y,
+	float local_light_gradient_z,
 	const PlantDeltaRecord *deltas,
 	uint32_t delta_count)
 {
@@ -3530,6 +3534,97 @@ plant_simulate_at_time(PlantInstance *plant,
 		plant->phenotype.crown_radius_m      *= scale;
 		plant->phenotype.trunk_base_radius_m *= scale;
 		plant->phenotype.total_leaf_area_m2  *= (scale * scale);
+	}
+
+	/* 3D Intra-Crown Beer-Lambert Light Competition, Phototropic Foraging & Self-Pruning Pass:
+	 * Builds a 12x12x12 3D canopy leaf-area voxel grid over the crown envelope, integrates downward
+	 * and sunward optical depth (modulated by genome.architecture.canopy_porosity), and:
+	 *   1. Bends shaded lateral shoots outward along the local light gradient (phototropism_strength + shade_avoidance),
+	 *   2. Attenuates or self-prunes deep interior/lower shaded leaves where light < branch_shed_threshold
+	 *      while preserving the outer sunlit shell, creating authentic hollow SpeedTree/Skyrim sub-crowns. */
+	if (plant->genome.architecture.max_branch_order >= 2u &&
+	    plant->phenotype.organ_count > 6u &&
+	    plant->phenotype.height_m > 0.5f) {
+		enum { LF_N = 12 };
+		float vox_lai[LF_N][LF_N][LF_N];
+		float vox_light[LF_N][LF_N][LF_N];
+		memset(vox_lai, 0, sizeof(vox_lai));
+
+		float r_bound = fmaxf(0.5f, plant->phenotype.crown_radius_m * 1.08f);
+		float h_bound = fmaxf(0.5f, plant->phenotype.height_m * 1.05f);
+		float inv_2r  = 1.0f / (2.0f * r_bound);
+		float inv_h   = 1.0f / h_bound;
+
+		for (uint32_t i = 0u; i < plant->phenotype.organ_count; i++) {
+			const PlantOrgan *o = &plant->phenotype.organs[i];
+			if (o->type != PLANT_ORGAN_LEAF) continue;
+			int ix = (int)floorf(((o->attachment_pos.x + r_bound) * inv_2r) * (float)LF_N);
+			int iy = (int)floorf(((o->attachment_pos.y + r_bound) * inv_2r) * (float)LF_N);
+			int iz = (int)floorf((o->attachment_pos.z * inv_h) * (float)LF_N);
+			if (ix < 0) ix = 0; else if (ix >= LF_N) ix = LF_N - 1;
+			if (iy < 0) iy = 0; else if (iy >= LF_N) iy = LF_N - 1;
+			if (iz < 0) iz = 0; else if (iz >= LF_N) iz = LF_N - 1;
+			vox_lai[iz][iy][ix] += o->length_m * o->width_m * 0.72f;
+		}
+
+		float porosity = plant_clampf(plant->genome.leaf.canopy_porosity, 0.15f, 0.92f);
+		float k_ext = (1.15f - 0.75f * porosity) / fmaxf(0.04f, (2.0f * r_bound / (float)LF_N) * (2.0f * r_bound / (float)LF_N));
+		float base_sun = plant_clampf(env->sunlight, 0.25f, 1.25f);
+
+		for (int iy = 0; iy < LF_N; iy++) {
+			for (int ix = 0; ix < LF_N; ix++) {
+				float accum_tau = 0.0f;
+				for (int iz = LF_N - 1; iz >= 0; iz--) {
+					/* Include partial lateral sky light near crown periphery */
+					float fx = ((float)ix + 0.5f) / (float)LF_N * 2.0f - 1.0f;
+					float fy = ((float)iy + 0.5f) / (float)LF_N * 2.0f - 1.0f;
+					float r_norm = sqrtf(fx * fx + fy * fy);
+					float sky_side = plant_clampf(r_norm * 0.48f, 0.0f, 0.45f);
+					float direct_l = base_sun * expf(-accum_tau * 0.32f);
+					vox_light[iz][iy][ix] = plant_clampf(direct_l * (1.0f - sky_side) + base_sun * sky_side, 0.08f, 1.25f);
+					accum_tau += vox_lai[iz][iy][ix] * k_ext;
+				}
+			}
+		}
+
+		float shed_thresh = plant_clampf(plant->genome.architecture.branch_shed_threshold * 0.38f, 0.10f, 0.34f);
+		float photo_str = plant_clampf(plant->genome.plasticity.phototropism_strength * 0.5f +
+		                               plant->genome.plasticity.shade_avoidance * 0.5f, 0.0f, 1.0f);
+		plant->phenotype.total_leaf_area_m2 = 0.0f;
+
+		for (uint32_t i = 0u; i < plant->phenotype.organ_count; i++) {
+			PlantOrgan *o = &plant->phenotype.organs[i];
+			if (o->type != PLANT_ORGAN_LEAF) continue;
+			int ix = (int)floorf(((o->attachment_pos.x + r_bound) * inv_2r) * (float)LF_N);
+			int iy = (int)floorf(((o->attachment_pos.y + r_bound) * inv_2r) * (float)LF_N);
+			int iz = (int)floorf((o->attachment_pos.z * inv_h) * (float)LF_N);
+			if (ix < 0) ix = 0; else if (ix >= LF_N) ix = LF_N - 1;
+			if (iy < 0) iy = 0; else if (iy >= LF_N) iy = LF_N - 1;
+			if (iz < 0) iz = 0; else if (iz >= LF_N) iz = LF_N - 1;
+
+			float loc_l = vox_light[iz][iy][ix];
+			int ix_p = (ix + 1 < LF_N) ? (ix + 1) : ix;
+			int ix_m = (ix > 0) ? (ix - 1) : ix;
+			int iy_p = (iy + 1 < LF_N) ? (iy + 1) : iy;
+			int iy_m = (iy > 0) ? (iy - 1) : iy;
+			int iz_p = (iz + 1 < LF_N) ? (iz + 1) : iz;
+			float gx = vox_light[iz][iy][ix_p] - vox_light[iz][iy][ix_m];
+			float gy = vox_light[iz][iy_p][ix] - vox_light[iz][iy_m][ix];
+			float gz = vox_light[iz_p][iy][ix] - loc_l;
+
+			/* Phototropic leaf & shoot orientation foraging toward local open-sky light gradient */
+			if (gx * gx + gy * gy + gz * gz > 1e-4f) {
+				PlantVec3 grad = plant_v3_norm(plant_v3(gx, gy, fmaxf(0.0f, gz)));
+				o->direction = plant_v3_norm(plant_v3_add(o->direction, plant_v3_scale(grad, 0.30f * photo_str)));
+			}
+
+			/* Self-shading vigor modulation: sunlit outer crown flushes fuller; deep shaded interior thins */
+			float light_vigor = plant_clampf((loc_l - shed_thresh * 0.45f) / fmaxf(0.15f, 0.82f - shed_thresh * 0.45f), 0.35f, 1.12f);
+			o->health = plant_clampf(0.30f + 0.70f * loc_l, 0.25f, 1.0f);
+			o->length_m *= (0.78f + 0.24f * light_vigor);
+			o->width_m  *= (0.78f + 0.24f * light_vigor);
+			plant->phenotype.total_leaf_area_m2 += 0.72f * o->length_m * o->width_m;
+		}
 	}
 
 	/* Compute physiological state metrics */
