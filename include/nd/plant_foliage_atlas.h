@@ -533,14 +533,106 @@ static inline void nd_fa_bake_blade_tile(uint8_t *atlas, int ox, int oy)
 	}
 }
 
-/* Bake full 512x512 level-0 botanical branchlet atlas */
-static inline void nd_foliage_atlas_bake_level0(uint8_t *rgba512)
+/* Bake full 1024x1024 level-0 botanical branchlet albedo atlas (RGBA8) */
+static inline void nd_foliage_atlas_bake_level0(uint8_t *rgba1024)
 {
-	memset(rgba512, 0, (size_t)ND_FOL_ATLAS_SIZE * (size_t)ND_FOL_ATLAS_SIZE * 4u);
-	nd_fa_bake_conifer_tile(rgba512, 0,                0);
-	nd_fa_bake_ovate_tile  (rgba512, ND_FOL_TILE_SIZE, 0);
-	nd_fa_bake_lobed_tile  (rgba512, 0,                ND_FOL_TILE_SIZE);
-	nd_fa_bake_blade_tile  (rgba512, ND_FOL_TILE_SIZE, ND_FOL_TILE_SIZE);
+	memset(rgba1024, 0, (size_t)ND_FOL_ATLAS_SIZE * (size_t)ND_FOL_ATLAS_SIZE * 4u);
+	nd_fa_bake_conifer_tile(rgba1024, 0,                0);
+	nd_fa_bake_ovate_tile  (rgba1024, ND_FOL_TILE_SIZE, 0);
+	nd_fa_bake_lobed_tile  (rgba1024, 0,                ND_FOL_TILE_SIZE);
+	nd_fa_bake_blade_tile  (rgba1024, ND_FOL_TILE_SIZE, ND_FOL_TILE_SIZE);
+}
+
+/* Build normal/depth/translucency tile from already-baked albedo tile (reads shade/bump/wood from albedo) */
+static inline void nd_fa_bake_normals_tile(const uint8_t *albedo, uint8_t *norm, int ox, int oy,
+                                           float relief_gain, float trans_gain)
+{
+	const float inv255 = 1.0f / 255.0f;
+	for (int py = 0; py < ND_FOL_TILE_SIZE; py++) {
+		int ym = (py > 0) ? (py - 1) : py;
+		int yp = (py + 1 < ND_FOL_TILE_SIZE) ? (py + 1) : py;
+		for (int px = 0; px < ND_FOL_TILE_SIZE; px++) {
+			size_t idx = ((size_t)(oy + py) * (size_t)ND_FOL_ATLAS_SIZE + (size_t)(ox + px)) * 4u;
+			const uint8_t *c = albedo + idx;
+			uint8_t *dst = norm + idx;
+			if (c[3] <= 1u) {
+				dst[0] = 128;
+				dst[1] = 128;
+				dst[2] = 0;
+				dst[3] = 0;
+				continue;
+			}
+			int xm = (px > 0) ? (px - 1) : px;
+			int xp = (px + 1 < ND_FOL_TILE_SIZE) ? (px + 1) : px;
+			float shade = (float)c[0] * inv255;
+			float bump  = (float)c[1] * inv255;
+			float wood  = (float)c[2] * inv255;
+			float h_c   = shade + 0.18f * wood;
+
+			const uint8_t *cl = albedo + ((size_t)(oy + py) * (size_t)ND_FOL_ATLAS_SIZE + (size_t)(ox + xm)) * 4u;
+			const uint8_t *cr = albedo + ((size_t)(oy + py) * (size_t)ND_FOL_ATLAS_SIZE + (size_t)(ox + xp)) * 4u;
+			const uint8_t *cu = albedo + ((size_t)(oy + ym) * (size_t)ND_FOL_ATLAS_SIZE + (size_t)(ox + px)) * 4u;
+			const uint8_t *cd = albedo + ((size_t)(oy + yp) * (size_t)ND_FOL_ATLAS_SIZE + (size_t)(ox + px)) * 4u;
+
+			float hl = (cl[3] > 12u) ? ((float)cl[0] * inv255 + 0.18f * (float)cl[2] * inv255) : h_c;
+			float hr = (cr[3] > 12u) ? ((float)cr[0] * inv255 + 0.18f * (float)cr[2] * inv255) : h_c;
+			float hu = (cu[3] > 12u) ? ((float)cu[0] * inv255 + 0.18f * (float)cu[2] * inv255) : h_c;
+			float hd = (cd[3] > 12u) ? ((float)cd[0] * inv255 + 0.18f * (float)cd[2] * inv255) : h_c;
+
+			float dx = (hr - hl) * 0.5f;
+			float dy = (hd - hu) * 0.5f;
+			float roll = (bump - 0.5f) * 2.0f;
+			float nx = nd_fa_clampf(-dx * relief_gain + roll * 0.48f, -0.90f, 0.90f);
+			float ny = nd_fa_clampf(-dy * relief_gain - roll * 0.22f, -0.90f, 0.90f);
+			float n2 = nx * nx + ny * ny;
+			if (n2 > 0.85f) {
+				float s = sqrtf(0.85f / n2);
+				nx *= s;
+				ny *= s;
+			}
+			float dz = nd_fa_clampf(0.24f + 0.44f * shade + 0.32f * wood, 0.0f, 1.0f);
+			float trans = nd_fa_clampf((1.0f - wood * 0.92f) * trans_gain * (0.65f + 0.35f * (1.0f - 0.35f * shade)), 0.03f, 0.98f);
+
+			dst[0] = nd_fa_u8(0.5f + 0.5f * nx);
+			dst[1] = nd_fa_u8(0.5f + 0.5f * ny);
+			dst[2] = nd_fa_u8(dz);
+			dst[3] = nd_fa_u8(trans);
+		}
+	}
+}
+
+static inline void nd_fa_bake_conifer_normals(const uint8_t *albedo, uint8_t *norm, int ox, int oy)
+{
+	nd_fa_bake_normals_tile(albedo, norm, ox, oy, 3.6f, 0.72f);
+}
+
+static inline void nd_fa_bake_ovate_normals(const uint8_t *albedo, uint8_t *norm, int ox, int oy)
+{
+	nd_fa_bake_normals_tile(albedo, norm, ox, oy, 3.0f, 0.94f);
+}
+
+static inline void nd_fa_bake_lobed_normals(const uint8_t *albedo, uint8_t *norm, int ox, int oy)
+{
+	nd_fa_bake_normals_tile(albedo, norm, ox, oy, 3.2f, 0.90f);
+}
+
+static inline void nd_fa_bake_blade_normals(const uint8_t *albedo, uint8_t *norm, int ox, int oy)
+{
+	nd_fa_bake_normals_tile(albedo, norm, ox, oy, 2.8f, 0.98f);
+}
+
+/* Bake full 1024x1024 level-0 companion normal/depth/translucency atlas (RGBA8)
+ *   R: Object-space Nx (0..255 -> -1..+1)
+ *   G: Object-space Ny (0..255 -> -1..+1)
+ *   B: Depth Dz / branchlet thickness (0..255 -> 0..max_depth)
+ *   A: Subsurface translucency / backlit glow factor (0..255) */
+static inline void nd_foliage_atlas_bake_normals_level0(const uint8_t *rgba1024, uint8_t *norm1024)
+{
+	memset(norm1024, 0, (size_t)ND_FOL_ATLAS_SIZE * (size_t)ND_FOL_ATLAS_SIZE * 4u);
+	nd_fa_bake_conifer_normals(rgba1024, norm1024, 0,                0);
+	nd_fa_bake_ovate_normals  (rgba1024, norm1024, ND_FOL_TILE_SIZE, 0);
+	nd_fa_bake_lobed_normals  (rgba1024, norm1024, 0,                ND_FOL_TILE_SIZE);
+	nd_fa_bake_blade_normals  (rgba1024, norm1024, ND_FOL_TILE_SIZE, ND_FOL_TILE_SIZE);
 }
 
 /* Alpha-coverage-preserving 2x2 box downsample:
@@ -584,6 +676,56 @@ static inline void nd_foliage_atlas_downsample(const uint8_t *src, int sw, int s
 			float avg_a = sum_a * 0.25f;
 			float cov_a = nd_fa_clampf(avg_a * 0.72f + max_a * 0.34f, 0.0f, 1.0f);
 			o[3] = nd_fa_u8(cov_a);
+		}
+	}
+}
+
+/* 2x2 box downsample for companion normal/depth/translucency atlas */
+static inline void nd_foliage_atlas_downsample_normals(const uint8_t *src, int sw, int sh, uint8_t *dst)
+{
+	int dw = (sw > 1) ? (sw >> 1) : 1;
+	int dh = (sh > 1) ? (sh >> 1) : 1;
+	for (int y = 0; y < dh; y++) {
+		int sy0 = y * 2;
+		int sy1 = (sy0 + 1 < sh) ? (sy0 + 1) : sy0;
+		for (int x = 0; x < dw; x++) {
+			int sx0 = x * 2;
+			int sx1 = (sx0 + 1 < sw) ? (sx0 + 1) : sx0;
+			const uint8_t *p[4] = {
+				src + (sy0 * sw + sx0) * 4,
+				src + (sy0 * sw + sx1) * 4,
+				src + (sy1 * sw + sx0) * 4,
+				src + (sy1 * sw + sx1) * 4
+			};
+			float sum_nx = 0.0f, sum_ny = 0.0f, sum_dz = 0.0f, sum_tr = 0.0f;
+			int count = 0;
+			for (int k = 0; k < 4; k++) {
+				if (p[k][3] > 0u) {
+					sum_nx += ((float)p[k][0] * (1.0f / 255.0f)) * 2.0f - 1.0f;
+					sum_ny += ((float)p[k][1] * (1.0f / 255.0f)) * 2.0f - 1.0f;
+					sum_dz += (float)p[k][2] * (1.0f / 255.0f);
+					sum_tr += (float)p[k][3] * (1.0f / 255.0f);
+					count++;
+				}
+			}
+			uint8_t *o = dst + (y * dw + x) * 4;
+			if (count > 0) {
+				float inv_c = 1.0f / (float)count;
+				float nx = sum_nx * inv_c;
+				float ny = sum_ny * inv_c;
+				float n2 = nx * nx + ny * ny;
+				if (n2 > 0.85f) {
+					float s = sqrtf(0.85f / n2);
+					nx *= s;
+					ny *= s;
+				}
+				o[0] = nd_fa_u8(0.5f + 0.5f * nx);
+				o[1] = nd_fa_u8(0.5f + 0.5f * ny);
+				o[2] = nd_fa_u8(sum_dz * inv_c);
+				o[3] = nd_fa_u8(sum_tr * inv_c);
+			} else {
+				o[0] = 128; o[1] = 128; o[2] = 0; o[3] = 0;
+			}
 		}
 	}
 }

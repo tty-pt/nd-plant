@@ -843,13 +843,13 @@ nd_m3d_add_terminal_shoot_fan(nd_mesh3d_builder_t *b,
 
 	/* Continuous angular spread, pitch, arc, drop, and roll governed by tabular_t and plagiotropic_t */
 	float wing_ang   = 0.78f + 0.24f * tabular_t - 0.16f * plagiotropic_t;
-	float pitch_main = 0.16f * (1.0f - tabular_t) * (1.0f - plagiotropic_t) + 0.03f * tabular_t - 0.04f * plagiotropic_t;
-	float pitch_wing = 0.12f * (1.0f - tabular_t) * (1.0f - plagiotropic_t) + 0.02f * tabular_t - 0.06f * plagiotropic_t;
-	float pitch_cap  = 0.24f * (1.0f - tabular_t) + 0.04f * tabular_t - 0.12f * plagiotropic_t;
-	float arc_scale  = 0.28f * (1.0f - 0.45f * tabular_t);
-	float drop_scale = 0.20f * (1.0f - 0.50f * tabular_t) + 0.08f * plagiotropic_t;
-	float roll_wing  = 0.28f * (1.0f - 0.45f * tabular_t) + 0.08f * plagiotropic_t;
-	float back_tuck  = 0.24f * (1.0f - 0.35f * tabular_t);
+	float pitch_main = 0.22f * (1.0f - tabular_t) * (1.0f - plagiotropic_t) + 0.04f * tabular_t - 0.04f * plagiotropic_t;
+	float pitch_wing = 0.16f * (1.0f - tabular_t) * (1.0f - plagiotropic_t) + 0.03f * tabular_t - 0.06f * plagiotropic_t;
+	float pitch_cap  = 0.34f * (1.0f - tabular_t) + 0.06f * tabular_t - 0.10f * plagiotropic_t;
+	float arc_scale  = 0.34f * (1.0f - 0.40f * tabular_t);
+	float drop_scale = 0.24f * (1.0f - 0.45f * tabular_t) + 0.08f * plagiotropic_t;
+	float roll_wing  = 0.44f * (1.0f - 0.40f * tabular_t) + 0.10f * plagiotropic_t;
+	float back_tuck  = 0.26f * (1.0f - 0.35f * tabular_t);
 
 	uint32_t h0 = nd_m3d_hash(seed + 137u);
 	float jit0 = (((float)(h0 & 0xFFu) / 255.0f) - 0.5f) * 0.16f;
@@ -861,12 +861,12 @@ nd_m3d_add_terminal_shoot_fan(nd_mesh3d_builder_t *b,
 		float sx = ax - dir_x * (r_base * back_tuck);
 		float sy = ay - dir_y * (r_base * back_tuck);
 		float sz = az + rz * 0.04f;
-		float card_len = r_base * (1.24f + 0.10f * tabular_t);
-		float card_hw  = card_len * (0.54f + 0.08f * tabular_t);
+		float card_len = r_base * (1.28f + 0.10f * tabular_t);
+		float card_hw  = card_len * (0.58f + 0.08f * tabular_t);
 		nd_m3d_add_branchlet_card(b, sx, sy, sz,
 		                          ca, sa, pitch_main,
 		                          card_len, rz * arc_scale, rz * drop_scale,
-		                          card_hw, rz * 0.12f, jit0 * 0.6f,
+		                          card_hw, rz * 0.14f, jit0 * 0.6f,
 		                          dome_cx, dome_cy, dome_cz,
 		                          fol_base,
 		                          col_deep, col_mid, col_lit, col_high, total_h);
@@ -882,13 +882,13 @@ nd_m3d_add_terminal_shoot_fan(nd_mesh3d_builder_t *b,
 		float sx = ax - ca * (r_base * back_tuck * 0.80f);
 		float sy = ay - sa * (r_base * back_tuck * 0.80f);
 		float sz = az + rz * (0.02f - 0.04f * (float)s);
-		float card_len = r_base * (1.14f + 0.10f * ((float)((hs >> 8) & 0x3Fu) / 63.0f));
-		float card_hw  = card_len * (0.56f + 0.06f * tabular_t);
+		float card_len = r_base * (1.18f + 0.10f * ((float)((hs >> 8) & 0x3Fu) / 63.0f));
+		float card_hw  = card_len * (0.60f + 0.06f * tabular_t);
 		float roll = side_sign * roll_wing + jitter * 0.18f;
 		nd_m3d_add_branchlet_card(b, sx, sy, sz,
 		                          ca, sa, pitch_wing,
 		                          card_len, rz * arc_scale * 0.90f, rz * drop_scale * 1.05f,
-		                          card_hw, rz * 0.12f, roll,
+		                          card_hw, rz * 0.14f, roll,
 		                          dome_cx, dome_cy, dome_cz,
 		                          fol_base,
 		                          col_deep, col_mid, col_lit, col_high, total_h);
@@ -903,13 +903,13 @@ nd_m3d_add_terminal_shoot_fan(nd_mesh3d_builder_t *b,
 		float fx = ax - ca * (r_base * back_tuck * 0.90f);
 		float fy = ay - sa * (r_base * back_tuck * 0.90f);
 		float fz = az + rz * (0.14f - 0.06f * tabular_t);
-		float card_len = r_base * (1.06f - 0.10f * tabular_t);
-		float card_hw  = card_len * 0.58f;
-		float roll = ((hf & 1u) ? 0.22f : -0.22f) * (1.0f - 0.45f * tabular_t);
+		float card_len = r_base * (1.12f - 0.08f * tabular_t);
+		float card_hw  = card_len * 0.62f;
+		float roll = ((hf & 1u) ? 0.36f : -0.36f) * (1.0f - 0.40f * tabular_t);
 		nd_m3d_add_branchlet_card(b, fx, fy, fz,
 		                          ca, sa, pitch_cap,
 		                          card_len, rz * arc_scale, rz * drop_scale * 0.85f,
-		                          card_hw, rz * 0.12f, roll,
+		                          card_hw, rz * 0.14f, roll,
 		                          dome_cx, dome_cy, dome_cz,
 		                          fol_base,
 		                          col_deep, col_mid, col_lit, col_high, total_h);
@@ -919,18 +919,18 @@ nd_m3d_add_terminal_shoot_fan(nd_mesh3d_builder_t *b,
 	{
 		uint32_t hc = nd_m3d_hash(seed + 313u);
 		float side_sign = (hc & 1u) ? 1.0f : -1.0f;
-		float ang = base_ang + side_sign * (0.42f + 0.35f * tabular_t);
+		float ang = base_ang + side_sign * (0.48f + 0.35f * tabular_t);
 		float ca = cosf(ang), sa = sinf(ang);
 		float cx0 = ax - ca * (r_base * back_tuck * 0.65f);
 		float cy0 = ay - sa * (r_base * back_tuck * 0.65f);
 		float cz0 = az + rz * 0.08f;
-		float card_len = r_base * 1.02f;
-		float card_hw  = card_len * 0.56f;
-		float roll = -side_sign * (0.36f * (1.0f - 0.45f * tabular_t) + 0.12f);
+		float card_len = r_base * 1.10f;
+		float card_hw  = card_len * 0.60f;
+		float roll = -side_sign * (0.52f * (1.0f - 0.40f * tabular_t) + 0.14f);
 		nd_m3d_add_branchlet_card(b, cx0, cy0, cz0,
-		                          ca, sa, pitch_main * 1.15f + 0.06f * (1.0f - tabular_t),
-		                          card_len, rz * arc_scale * 1.05f, rz * drop_scale * 0.90f,
-		                          card_hw, rz * 0.14f, roll,
+		                          ca, sa, pitch_main * 1.25f + 0.08f * (1.0f - tabular_t),
+		                          card_len, rz * arc_scale * 1.10f, rz * drop_scale * 0.90f,
+		                          card_hw, rz * 0.16f, roll,
 		                          dome_cx, dome_cy, dome_cz,
 		                          fol_base,
 		                          col_deep, col_mid, col_lit, col_high, total_h);
@@ -1054,14 +1054,13 @@ nd_m3d_add_fruit_berry(nd_mesh3d_builder_t *b,
  * Section 3: Stage 4 Pure Genome & MTG Geometry Consumer (plant_geometry_build)
  * ========================================================================= */
 
-/* Evaluate the perspective-compensated conical crown-base floor z_floor(x, y) for woody trees.
- * Under the 55-deg diorama projection, h_proj(y, z) = z - 0.7002075 * y.
- * Clamping z >= H * clear_bole_eff + max(0, y) * 0.72 + |x| * 0.10 guarantees that
- * h_proj(y, z) >= H * clear_bole_eff for every lateral limb and foliage card vertex. */
+/* Evaluate the perspective-compensated radially symmetric conical crown-base floor z_floor(x, y).
+ * Using radial distance r = hypotf(x, y) guarantees that 360-deg instance yaw rotation in s_vs_mesh3d
+ * is 100% yaw-invariant while keeping h_proj(r, z) = z - 0.7002075 * r >= H * clear_bole_eff. */
 static inline float
 nd_plant_m3d_eval_crown_floor_z(float x, float y, float h_total, float clear_bole_eff)
 {
-	return h_total * clear_bole_eff + fmaxf(0.0f, y) * 0.72f + fabsf(x) * 0.10f;
+	return h_total * clear_bole_eff + hypotf(x, y) * 0.72f;
 }
 
 static inline void
@@ -1106,8 +1105,7 @@ plant_geometry_build(const PlantInstance *plant,
 
 	/* Separate horizontal (scale_xy) and vertical (scale_z) metric-to-world-unit transforms
 	 * so wide crowns (where W > H) never compress horizontal branch reach when scaled to h_total.
-	 * Compress Y depth on woody trees (especially tabular canopies) so 55-deg projection
-	 * displays crisp horizontal strata rather than a thick foreshortened vertical oval. */
+	 * Keep horizontal X/Y depth isotropic so 360-deg instance yaw rotation never looks squashed side-on. */
 	float scale_z  = (pheno->height_m > 1e-3f) ? ((h_total * 0.89f) / pheno->height_m) : wu_per_m;
 	float scale_xy = (pheno->crown_radius_m > 1e-3f)
 		? ((w_total * (0.40f + 0.06f * tabular_t)) / pheno->crown_radius_m)
@@ -1117,7 +1115,7 @@ plant_geometry_build(const PlantInstance *plant,
 	} else {
 		scale_xy = plant_clampf(scale_xy, scale_z * 0.65f, scale_z * 1.65f);
 	}
-	float y_depth_scale = is_woody_tree ? (0.58f - 0.16f * tabular_t) : 0.88f;
+	float y_depth_scale = is_woody_tree ? (0.94f - 0.06f * tabular_t) : 0.96f;
 
 	uint32_t c_bark_dark  = nd_m3d_pack_color4(g->allometry.bark_dark);
 	uint32_t c_bark_mid   = nd_m3d_pack_color4(g->allometry.bark_mid);
@@ -1622,18 +1620,21 @@ plant_geometry_build(const PlantInstance *plant,
 				                            c_leaf_deep, c_leaf_mid, c_leaf_lit, c_leaf_high,
 				                            h_total);
 			} else {
-				/* Woody Tree Terminal Shoot Foliage:
-				 * Attach branchlet fans ONLY to terminal shoots (order >= 2 on sympodial/dome/tabular trees,
-				 * or outer whorl limbs on plagiotropic spires), leaving trunk and primary order-1 V-vase
-				 * scaffold limbs clearly visible below the canopy. */
+				/* Woody Tree Shoot Foliage:
+				 * Attach branchlet fans to terminal shoots as well as upper order-1 / order-2 scaffold forks
+				 * (z >= 0.48 * h_total on non-tabular trees) to form interlocking 3D sub-canopy volume while
+				 * leaving the lower trunk and primary V-vase scaffold limbs clearly visible below the crown floor. */
 				if (org->sub_index != 0u || org->branch_order == 0u)
 					continue;
-				if (org->branch_order == 1u && plagiotropic_t < 0.35f)
+				if (org->branch_order == 1u && plagiotropic_t < 0.35f &&
+				    (tabular_t > 0.35f || !is_axis_tip || az < h_total * 0.48f))
 					continue;
 				if (org->branch_order > max_order_draw)
 					continue;
 				if (!is_terminal_shoot) {
-					if (!(plagiotropic_t > 0.5f && org->branch_order >= 1u && is_axis_tip))
+					bool upper_subcrown = (org->branch_order >= 2u && is_axis_tip &&
+					                       tabular_t < 0.35f && az >= h_total * 0.48f);
+					if (!upper_subcrown && !(plagiotropic_t > 0.5f && org->branch_order >= 1u && is_axis_tip))
 						continue;
 				}
 				if (bough_clusters_emitted >= max_clusters)
@@ -1643,14 +1644,14 @@ plant_geometry_build(const PlantInstance *plant,
 				float h_t = plant_clampf(az / fmaxf(1.0f, h_total), 0.0f, 1.0f);
 				float spire_taper = 1.0f - plagiotropic_t * (1.0f - powf(fmaxf(0.18f, 1.04f - 0.80f * h_t), 0.78f));
 
-				/* Local branchlet cluster radius: compact enough (0.13..0.17 * w_total) to preserve
-				 * visible branch architecture and sky fenestrations between sub-crowns, modulated by
+				/* Local branchlet cluster radius: full enough (0.165..0.20 * w_total) to form interlocking
+				 * 3D bough strata while preserving sky fenestrations between sub-crowns, modulated by
 				 * 3D Beer-Lambert light-competition health (org->health) so sunlit outer crown flushes fuller. */
-				float light_scale = 0.86f + 0.22f * plant_clampf(org->health, 0.25f, 1.0f);
-				float base_rx_frac = (0.145f + 0.035f * tabular_t + 0.030f * plagiotropic_t) * light_scale;
+				float light_scale = 0.88f + 0.22f * plant_clampf(org->health, 0.25f, 1.0f);
+				float base_rx_frac = (0.165f + 0.035f * tabular_t + 0.030f * plagiotropic_t) * light_scale;
 				float rx = w_total * base_rx_frac * spire_taper;
-				float ry = rx * (0.92f - 0.12f * tabular_t);
-				float rz = rx * plant_clampf(crown_flatness * 0.62f, 0.18f, 0.54f);
+				float ry = rx * (0.94f - 0.08f * tabular_t);
+				float rz = rx * plant_clampf(crown_flatness * 0.68f, 0.22f, 0.58f);
 
 				/* Continuous foliar stratum floor: on tabular crowns (tabular_t > 0), foliage sits
 				 * above the ascending order-1 V-vase scaffold (clear_bole_f + 0.28 * tabular_t). */

@@ -806,6 +806,12 @@ typedef struct {
 	float          water_potential;
 	float          stress_index;
 	bool           owns_heap_storage;
+	/* Growth-time 3D Beer-Lambert light competition voxel grid (12^3) */
+	float          light_vox_lai[12][12][12];
+	float          light_vox_val[12][12][12];
+	float          light_vox_bounds_r;
+	float          light_vox_bounds_h;
+	bool           light_vox_valid;
 } PlantInstance;
 
 /* ============================================================================
@@ -1731,19 +1737,19 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.internode_length_m = (PlantDistribution){ 0.88f, 0.12f, 0.46f, 1.40f };
 		g->architecture.branch_angle_deg = (PlantDistribution){ 68.0f, 7.0f, 45.0f, 88.0f };
 		g->architecture.roll_variation_deg = (PlantDistribution){ 12.0f, 4.0f, 0.0f, 30.0f };
-		g->architecture.apical_dominance = 0.62f;
+		g->architecture.apical_dominance = 0.78f;
 		g->architecture.acrotony = 0.88f;
 		g->architecture.basitony = 0.02f;
-		g->architecture.clear_bole_fraction = 0.56f;
-		g->architecture.fork_probability = 0.22f;
-		g->architecture.orthotropy = 0.35f;
+		g->architecture.clear_bole_fraction = 0.52f;
+		g->architecture.fork_probability = 0.28f;
+		g->architecture.orthotropy = 0.30f;
 		g->architecture.tortuosity = 0.38f;
-		g->architecture.crown_flatness = 0.54f;
+		g->architecture.crown_flatness = 0.46f;
 		g->architecture.branch_shed_threshold = 0.68f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_WHORLED;
 		g->phyllotaxis.buds_per_node = 3u;
 		g->phyllotaxis.divergence_angle_deg = 120.0f;
-		g->meristem.lateral_bud_probability = 0.78f;
+		g->meristem.lateral_bud_probability = 0.86f;
 		g->allometry.pipe_model_exponent = 2.08f;
 		g->allometry.basal_radius_ratio = 0.044f;
 		g->allometry.tip_min_radius_m = 0.026f;
@@ -1788,10 +1794,11 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.orthotropy = 0.85f;
 		g->architecture.tortuosity = 0.08f;
 		g->architecture.crown_flatness = 0.45f;
+		g->architecture.branch_shed_threshold = 0.54f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_WHORLED;
 		g->phyllotaxis.buds_per_node = 4u;
 		g->phyllotaxis.divergence_angle_deg = 90.0f;
-		g->meristem.lateral_bud_probability = 0.88f;
+		g->meristem.lateral_bud_probability = 0.92f;
 		g->allometry.pipe_model_exponent = 2.18f;
 		g->allometry.basal_radius_ratio = 0.052f;
 		g->allometry.tip_min_radius_m = 0.025f;
@@ -1827,14 +1834,15 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basal_stem_count = 2u;
 		g->architecture.internode_length_m = (PlantDistribution){ 0.76f, 0.10f, 0.40f, 1.18f };
 		g->architecture.branch_angle_deg = (PlantDistribution){ 46.0f, 7.0f, 28.0f, 68.0f };
-		g->architecture.apical_dominance = 0.66f;
+		g->architecture.apical_dominance = 0.68f;
 		g->architecture.acrotony = 0.68f;
 		g->architecture.clear_bole_fraction = 0.34f;
 		g->architecture.orthotropy = -0.35f; /* high arching then weeping pendulous tips */
 		g->architecture.tortuosity = 0.26f;
 		g->architecture.crown_flatness = 0.78f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_SPIRAL;
-		g->phyllotaxis.buds_per_node = 2u;
+		g->phyllotaxis.buds_per_node = 3u;
+		g->meristem.lateral_bud_probability = 0.86f;
 		g->allometry.pipe_model_exponent = 2.15f;
 		g->allometry.basal_radius_ratio = 0.034f;
 		g->allometry.tip_min_radius_m = 0.017f;
@@ -1867,7 +1875,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		sp->architectural_model = PLANT_ARCH_MCCLURE;
 		g->architecture.model = PLANT_ARCH_MCCLURE;
 		g->architecture.max_branch_order = 2u;
-		g->architecture.basal_stem_count = 6u;
+		g->architecture.basal_stem_count = 5u;
 		g->architecture.internode_length_m = (PlantDistribution){ 0.14f, 0.02f, 0.08f, 0.22f };
 		g->architecture.branch_angle_deg = (PlantDistribution){ 32.0f, 5.0f, 18.0f, 48.0f };
 		g->architecture.apical_dominance = 0.82f;
@@ -1877,8 +1885,8 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.orthotropy = 0.78f;
 		g->architecture.tortuosity = 0.10f;
 		g->architecture.crown_flatness = 0.85f;
-		g->allometry.basal_radius_ratio = 0.032f;
-		g->allometry.tip_min_radius_m = 0.007f;
+		g->allometry.basal_radius_ratio = 0.024f;
+		g->allometry.tip_min_radius_m = 0.005f;
 		g->allometry.root_flare_strength = 0.10f;
 		g->allometry.bark_class = 5u; /* ND_PLANT_BARK_HERB */
 		g->allometry.bark_dark  = plant_rgba_u8(42, 72, 32, 255);
@@ -1899,7 +1907,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->flower.inflorescence = PLANT_INFLORESCENCE_PANICLE;
 		g->flower.corolla_type = PLANT_COROLLA_FREE_PETALS;
 		g->flower.petal_count = 5u;
-		g->flower.flower_radius_m = (PlantDistribution){ 0.075f, 0.01f, 0.04f, 0.11f };
+		g->flower.flower_radius_m = (PlantDistribution){ 0.055f, 0.008f, 0.03f, 0.085f };
 		g->flower.primary_color   = plant_rgba_u8(132, 182, 248, 255);
 		g->flower.secondary_color = plant_rgba_u8(64, 108, 196, 255);
 		g->physiology.mature_height_m = 0.76f;
@@ -1918,13 +1926,14 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basal_stem_count = 3u;
 		g->architecture.internode_length_m = (PlantDistribution){ 0.68f, 0.09f, 0.36f, 1.04f };
 		g->architecture.branch_angle_deg = (PlantDistribution){ 52.0f, 6.0f, 34.0f, 72.0f };
-		g->architecture.apical_dominance = 0.56f;
+		g->architecture.apical_dominance = 0.60f;
 		g->architecture.acrotony = 0.65f;
 		g->architecture.clear_bole_fraction = 0.26f;
 		g->architecture.orthotropy = 0.28f;
 		g->architecture.tortuosity = 0.32f;
 		g->architecture.crown_flatness = 0.84f;
-		g->phyllotaxis.buds_per_node = 2u;
+		g->phyllotaxis.buds_per_node = 3u;
+		g->meristem.lateral_bud_probability = 0.84f;
 		g->allometry.basal_radius_ratio = 0.036f;
 		g->allometry.tip_min_radius_m = 0.019f;
 		g->allometry.bark_class = 2u;
@@ -1963,10 +1972,11 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.orthotropy = 0.90f;
 		g->architecture.tortuosity = 0.05f;
 		g->architecture.crown_flatness = 0.42f;
+		g->architecture.branch_shed_threshold = 0.52f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_WHORLED;
 		g->phyllotaxis.buds_per_node = 4u;
 		g->phyllotaxis.divergence_angle_deg = 90.0f;
-		g->meristem.lateral_bud_probability = 0.90f;
+		g->meristem.lateral_bud_probability = 0.94f;
 		g->allometry.pipe_model_exponent = 2.20f;
 		g->allometry.basal_radius_ratio = 0.054f;
 		g->allometry.tip_min_radius_m = 0.025f;
@@ -2003,17 +2013,20 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		sp->architectural_model = PLANT_ARCH_CORNER;
 		g->architecture.model = PLANT_ARCH_CORNER;
 		g->architecture.max_branch_order = 1u;
-		g->architecture.basal_stem_count = 3u;
-		g->architecture.internode_length_m = (PlantDistribution){ 0.24f, 0.03f, 0.14f, 0.36f };
-		g->architecture.branch_angle_deg = (PlantDistribution){ 42.0f, 5.0f, 25.0f, 58.0f };
-		g->architecture.apical_dominance = 0.90f;
-		g->architecture.acrotony = 0.35f;
-		g->architecture.basitony = 0.55f;
-		g->architecture.clear_bole_fraction = 0.22f;
-		g->architecture.orthotropy = 0.95f;
-		g->architecture.tortuosity = 0.04f;
+		g->architecture.basal_stem_count = 1u;
+		g->architecture.internode_length_m = (PlantDistribution){ 0.28f, 0.03f, 0.18f, 0.42f };
+		g->architecture.branch_angle_deg = (PlantDistribution){ 68.0f, 5.0f, 54.0f, 82.0f };
+		g->architecture.apical_dominance = 0.88f;
+		g->architecture.acrotony = 0.40f;
+		g->architecture.basitony = 0.60f;
+		g->architecture.clear_bole_fraction = 0.30f;
+		g->architecture.orthotropy = 0.96f;
+		g->architecture.tortuosity = 0.03f;
 		g->architecture.crown_flatness = 1.35f;
-		g->meristem.lateral_bud_probability = 0.28f;
+		g->phyllotaxis.mode = PLANT_PHYLLO_WHORLED;
+		g->phyllotaxis.buds_per_node = 2u;
+		g->phyllotaxis.divergence_angle_deg = 137.5f;
+		g->meristem.lateral_bud_probability = 0.82f;
 		g->allometry.pipe_model_exponent = 2.40f;
 		g->allometry.basal_radius_ratio = 0.095f;
 		g->allometry.tip_min_radius_m = 0.085f;
@@ -2035,7 +2048,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->flower.inflorescence = PLANT_INFLORESCENCE_SOLITARY;
 		g->flower.corolla_type = PLANT_COROLLA_FUNNELFORM;
 		g->flower.petal_count = 8u;
-		g->flower.flower_radius_m = (PlantDistribution){ 0.11f, 0.015f, 0.06f, 0.16f };
+		g->flower.flower_radius_m = (PlantDistribution){ 0.095f, 0.012f, 0.05f, 0.14f };
 		g->flower.primary_color   = plant_rgba_u8(248, 232, 238, 255);
 		g->flower.secondary_color = plant_rgba_u8(204, 116, 142, 255);
 		g->physiology.mature_height_m = 1.29f;
@@ -2053,7 +2066,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basal_stem_count = 1u;
 		g->architecture.internode_length_m = (PlantDistribution){ 0.86f, 0.12f, 0.48f, 1.32f };
 		g->architecture.branch_angle_deg = (PlantDistribution){ 66.0f, 6.0f, 48.0f, 84.0f };
-		g->architecture.apical_dominance = 0.22f;
+		g->architecture.apical_dominance = 0.30f;
 		g->architecture.acrotony = 0.90f;
 		g->architecture.clear_bole_fraction = 0.38f;
 		g->architecture.fork_probability = 0.58f;
@@ -2061,6 +2074,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.tortuosity = 0.48f;
 		g->architecture.crown_flatness = 0.26f;
 		g->phyllotaxis.buds_per_node = 3u;
+		g->meristem.lateral_bud_probability = 0.88f;
 		g->allometry.pipe_model_exponent = 2.05f;
 		g->allometry.basal_radius_ratio = 0.038f;
 		g->allometry.tip_min_radius_m = 0.024f;
@@ -2092,21 +2106,21 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		sp->architectural_model = PLANT_ARCH_LEEUWENBERG;
 		g->architecture.model = PLANT_ARCH_LEEUWENBERG;
 		g->architecture.max_branch_order = 2u;
-		g->architecture.basal_stem_count = 5u;
+		g->architecture.basal_stem_count = 4u;
 		g->architecture.internode_length_m = (PlantDistribution){ 0.14f, 0.02f, 0.08f, 0.22f };
-		g->architecture.branch_angle_deg = (PlantDistribution){ 46.0f, 6.0f, 28.0f, 64.0f };
+		g->architecture.branch_angle_deg = (PlantDistribution){ 42.0f, 6.0f, 26.0f, 58.0f };
 		g->architecture.apical_dominance = 0.62f;
 		g->architecture.basitony = 0.72f;
 		g->architecture.clear_bole_fraction = 0.12f;
 		g->architecture.orthotropy = 0.58f;
-		g->architecture.crown_flatness = 0.64f;
-		g->allometry.basal_radius_ratio = 0.048f;
-		g->allometry.tip_min_radius_m = 0.009f;
-		g->allometry.root_flare_strength = 0.55f; /* exposed orange taproot crown */
+		g->architecture.crown_flatness = 0.56f;
+		g->allometry.basal_radius_ratio = 0.032f;
+		g->allometry.tip_min_radius_m = 0.007f;
+		g->allometry.root_flare_strength = 0.55f;
 		g->allometry.bark_class = 5u;
-		g->allometry.bark_dark  = plant_rgba_u8(176, 78, 22, 255);
-		g->allometry.bark_mid   = plant_rgba_u8(218, 108, 32, 255);
-		g->allometry.bark_light = plant_rgba_u8(246, 142, 52, 255);
+		g->allometry.bark_dark  = plant_rgba_u8(46, 78, 30, 255);
+		g->allometry.bark_mid   = plant_rgba_u8(74, 118, 46, 255);
+		g->allometry.bark_light = plant_rgba_u8(108, 156, 68, 255);
 		g->leaf.complexity = PLANT_LEAF_PINNATE;
 		g->leaf.shape = PLANT_LEAF_SHAPE_PINNATELY_LOBED;
 		g->leaf.blade_length_m = (PlantDistribution){ 0.18f, 0.03f, 0.10f, 0.28f };
@@ -2122,9 +2136,9 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->flower.has_flowers = true;
 		g->flower.inflorescence = PLANT_INFLORESCENCE_UMBEL;
 		g->flower.petal_count = 5u;
-		g->flower.flower_radius_m = (PlantDistribution){ 0.11f, 0.015f, 0.06f, 0.16f };
-		g->flower.primary_color   = plant_rgba_u8(246, 248, 238, 255);
-		g->flower.secondary_color = plant_rgba_u8(186, 192, 178, 255);
+		g->flower.flower_radius_m = (PlantDistribution){ 0.095f, 0.012f, 0.05f, 0.14f };
+		g->flower.primary_color   = plant_rgba_u8(248, 250, 242, 255);
+		g->flower.secondary_color = plant_rgba_u8(186, 198, 168, 255);
 		g->physiology.mature_height_m = 0.71f;
 		g->physiology.mature_crown_width_m = 0.62f;
 		g->physiology.max_age_years = 2.0f;
@@ -2148,8 +2162,8 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.tortuosity = 0.34f;
 		g->architecture.crown_flatness = 0.78f;
 		g->phyllotaxis.buds_per_node = 2u;
-		g->allometry.basal_radius_ratio = 0.045f;
-		g->allometry.tip_min_radius_m = 0.010f;
+		g->allometry.basal_radius_ratio = 0.036f;
+		g->allometry.tip_min_radius_m = 0.008f;
 		g->allometry.bark_class = 5u;
 		g->allometry.bark_dark  = plant_rgba_u8(34, 68, 24, 255);
 		g->allometry.bark_mid   = plant_rgba_u8(56, 102, 38, 255);
@@ -2170,7 +2184,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->flower.has_flowers = true;
 		g->flower.inflorescence = PLANT_INFLORESCENCE_RACEME;
 		g->flower.petal_count = 5u;
-		g->flower.flower_radius_m = (PlantDistribution){ 0.055f, 0.01f, 0.03f, 0.09f };
+		g->flower.flower_radius_m = (PlantDistribution){ 0.045f, 0.008f, 0.025f, 0.07f };
 		g->flower.primary_color   = plant_rgba_u8(246, 218, 54, 255);
 		g->flower.secondary_color = plant_rgba_u8(198, 158, 28, 255);
 		g->fruit.fruit_type = PLANT_FRUIT_BERRY;
@@ -2194,7 +2208,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basal_stem_count = 1u;
 		g->architecture.internode_length_m = (PlantDistribution){ 0.96f, 0.13f, 0.52f, 1.48f };
 		g->architecture.branch_angle_deg = (PlantDistribution){ 64.0f, 7.0f, 44.0f, 84.0f };
-		g->architecture.apical_dominance = 0.34f;
+		g->architecture.apical_dominance = 0.42f;
 		g->architecture.acrotony = 0.78f;
 		g->architecture.clear_bole_fraction = 0.28f;
 		g->architecture.fork_probability = 0.42f;
@@ -2202,7 +2216,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.tortuosity = 0.52f;
 		g->architecture.crown_flatness = 0.72f;
 		g->phyllotaxis.buds_per_node = 3u;
-		g->meristem.lateral_bud_probability = 0.82f;
+		g->meristem.lateral_bud_probability = 0.88f;
 		g->allometry.pipe_model_exponent = 2.02f;
 		g->allometry.basal_radius_ratio = 0.072f;
 		g->allometry.tip_min_radius_m = 0.034f;
@@ -2239,7 +2253,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basal_stem_count = 1u;
 		g->architecture.internode_length_m = (PlantDistribution){ 0.88f, 0.12f, 0.48f, 1.34f };
 		g->architecture.branch_angle_deg = (PlantDistribution){ 54.0f, 7.0f, 35.0f, 74.0f };
-		g->architecture.apical_dominance = 0.38f;
+		g->architecture.apical_dominance = 0.44f;
 		g->architecture.acrotony = 0.74f;
 		g->architecture.clear_bole_fraction = 0.30f;
 		g->architecture.fork_probability = 0.38f;
@@ -2247,6 +2261,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.tortuosity = 0.38f;
 		g->architecture.crown_flatness = 0.88f;
 		g->phyllotaxis.buds_per_node = 3u;
+		g->meristem.lateral_bud_probability = 0.88f;
 		g->allometry.pipe_model_exponent = 2.06f;
 		g->allometry.basal_radius_ratio = 0.064f;
 		g->allometry.tip_min_radius_m = 0.025f;
@@ -2292,7 +2307,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->phyllotaxis.buds_per_node = 2u;
 		g->phyllotaxis.divergence_angle_deg = 90.0f;
 		g->phyllotaxis.decussate_phase_flip = true;
-		g->meristem.lateral_bud_probability = 0.84f;
+		g->meristem.lateral_bud_probability = 0.88f;
 		g->allometry.pipe_model_exponent = 2.08f;
 		g->allometry.basal_radius_ratio = 0.060f;
 		g->allometry.tip_min_radius_m = 0.029f;
@@ -2329,7 +2344,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basal_stem_count = 1u;
 		g->architecture.internode_length_m = (PlantDistribution){ 0.68f, 0.09f, 0.36f, 1.04f };
 		g->architecture.branch_angle_deg = (PlantDistribution){ 62.0f, 7.0f, 42.0f, 82.0f };
-		g->architecture.apical_dominance = 0.26f;
+		g->architecture.apical_dominance = 0.34f;
 		g->architecture.acrotony = 0.78f;
 		g->architecture.clear_bole_fraction = 0.28f;
 		g->architecture.fork_probability = 0.52f;
@@ -2339,7 +2354,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->phyllotaxis.mode = PLANT_PHYLLO_DECUSSATE;
 		g->phyllotaxis.buds_per_node = 2u;
 		g->phyllotaxis.decussate_phase_flip = true;
-		g->meristem.lateral_bud_probability = 0.82f;
+		g->meristem.lateral_bud_probability = 0.88f;
 		g->allometry.pipe_model_exponent = 1.96f;
 		g->allometry.basal_radius_ratio = 0.078f;
 		g->allometry.tip_min_radius_m = 0.032f;
@@ -2379,8 +2394,8 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.clear_bole_fraction = 0.05f;
 		g->architecture.orthotropy = 0.82f;
 		g->architecture.crown_flatness = 0.45f;
-		g->allometry.basal_radius_ratio = 0.036f;
-		g->allometry.tip_min_radius_m = 0.005f;
+		g->allometry.basal_radius_ratio = 0.026f;
+		g->allometry.tip_min_radius_m = 0.004f;
 		g->allometry.root_flare_strength = 0.05f;
 		g->allometry.bark_class = 5u;
 		g->allometry.bark_dark  = plant_rgba_u8(44, 78, 32, 255);
@@ -2703,10 +2718,6 @@ plant_sim_develop_axis_recursive(
 	PlantVec3 start_dir,
 	float inherited_foliage_eta,
 	float inherited_fruit_eta,
-	float local_light_at_apex,
-	float local_light_gradient_x,
-	float local_light_gradient_y,
-	float local_light_gradient_z,
 	const PlantDeltaRecord *deltas,
 	uint32_t delta_count)
 {
@@ -2948,6 +2959,35 @@ plant_sim_develop_axis_recursive(
 		if (env) {
 			steered = plant_v3_add(steered, plant_v3_scale(env->mean_light_dir, g->plasticity.phototropism_strength * 0.16f));
 		}
+		/* Growth-time 3D light gradient phototropic steering using the Beer-Lambert voxel grid */
+		if (inst->light_vox_valid && order >= 1u) {
+			enum { LF_N = 12 };
+			float r_bound = inst->light_vox_bounds_r;
+			float h_bound = inst->light_vox_bounds_h;
+			if (r_bound > 0.1f && h_bound > 0.1f) {
+				float inv_2r = 1.0f / (2.0f * r_bound);
+				float inv_h  = 1.0f / h_bound;
+				int ix = (int)floorf(((cur_pos.x + r_bound) * inv_2r) * (float)LF_N);
+				int iy = (int)floorf(((cur_pos.y + r_bound) * inv_2r) * (float)LF_N);
+				int iz = (int)floorf((cur_pos.z * inv_h) * (float)LF_N);
+				if (ix >= 0 && ix < LF_N && iy >= 0 && iy < LF_N && iz >= 0 && iz < LF_N) {
+					int ix_p = (ix + 1 < LF_N) ? (ix + 1) : ix;
+					int ix_m = (ix > 0) ? (ix - 1) : ix;
+					int iy_p = (iy + 1 < LF_N) ? (iy + 1) : iy;
+					int iy_m = (iy > 0) ? (iy - 1) : iy;
+					int iz_p = (iz + 1 < LF_N) ? (iz + 1) : iz;
+					float gx = inst->light_vox_val[iz][iy][ix_p] - inst->light_vox_val[iz][iy][ix_m];
+					float gy = inst->light_vox_val[iz][iy_p][ix] - inst->light_vox_val[iz][iy_m][ix];
+					float gz = inst->light_vox_val[iz_p][iy][ix] - inst->light_vox_val[iz][iy][ix];
+					if (gx * gx + gy * gy + gz * gz > 1e-4f) {
+						PlantVec3 grad = plant_v3_norm(plant_v3(gx, gy, fmaxf(0.0f, gz)));
+						float photo_str = plant_clampf(g->plasticity.phototropism_strength * 0.5f +
+						                                   g->plasticity.shade_avoidance * 0.5f, 0.0f, 1.0f);
+						steered = plant_v3_add(steered, plant_v3_scale(grad, photo_str * 0.45f));
+					}
+				}
+			}
+		}
 		cur_dir = plant_v3_norm(steered);
 
 		/* Enforce genome-driven crown-base floor so lateral branches never plunge below the clear bole */
@@ -3113,6 +3153,27 @@ plant_sim_develop_axis_recursive(
 			    pending_count < 24u) {
 				float p_break = g->meristem.lateral_bud_probability *
 				                (1.0f - 0.50f * apical_inhib) * pos_weight;
+				/* Light-based bud break modulation: shaded buds less likely to break */
+				if (inst->light_vox_valid && order >= 1u) {
+					enum { LF_N = 12 };
+					float r_bound = inst->light_vox_bounds_r;
+					float h_bound = inst->light_vox_bounds_h;
+					if (r_bound > 0.1f && h_bound > 0.1f) {
+						float inv_2r = 1.0f / (2.0f * r_bound);
+						float inv_h  = 1.0f / h_bound;
+						int ix = (int)floorf(((tip_pos.x + r_bound) * inv_2r) * (float)LF_N);
+						int iy = (int)floorf(((tip_pos.y + r_bound) * inv_2r) * (float)LF_N);
+						int iz = (int)floorf((tip_pos.z * inv_h) * (float)LF_N);
+						if (ix >= 0 && ix < LF_N && iy >= 0 && iy < LF_N && iz >= 0 && iz < LF_N) {
+							float loc_l = inst->light_vox_val[iz][iy][ix];
+							float shed_thresh = plant_clampf(g->architecture.branch_shed_threshold * 0.38f, 0.10f, 0.34f);
+							if (loc_l < shed_thresh) {
+								p_break *= plant_clampf(loc_l / fmaxf(shed_thresh, 0.05f), 0.15f, 1.0f);
+							}
+						}
+					}
+				}
+
 				/* Guarantee active lateral scaffolds at every crown node on trees */
 				if (is_tree_arch && (b == 0u || (tabular_t > 0.35f && order == 0u)))
 					p_break = fmaxf(p_break, 0.94f);
@@ -3238,6 +3299,23 @@ plant_sim_develop_axis_recursive(
 				org->curvature = lcurv;
 				org->maturity = lmat;
 				org->health = 1.0f;
+				/* Light-based leaf health from growth-time Beer-Lambert grid */
+				if (inst->light_vox_valid) {
+					enum { LF_N = 12 };
+					float r_bound = inst->light_vox_bounds_r;
+					float h_bound = inst->light_vox_bounds_h;
+					if (r_bound > 0.1f && h_bound > 0.1f) {
+						float inv_2r = 1.0f / (2.0f * r_bound);
+						float inv_h  = 1.0f / h_bound;
+						int ix = (int)floorf(((org->attachment_pos.x + r_bound) * inv_2r) * (float)LF_N);
+						int iy = (int)floorf(((org->attachment_pos.y + r_bound) * inv_2r) * (float)LF_N);
+						int iz = (int)floorf((org->attachment_pos.z * inv_h) * (float)LF_N);
+						if (ix >= 0 && ix < LF_N && iy >= 0 && iy < LF_N && iz >= 0 && iz < LF_N) {
+							float loc_l = inst->light_vox_val[iz][iy][ix];
+							org->health = plant_clampf(0.25f + 0.75f * loc_l, 0.20f, 1.0f);
+						}
+					}
+				}
 				org->branch_order = order;
 				org->sub_index = li;
 				org->topo_hash = org_hash;
@@ -3286,6 +3364,23 @@ plant_sim_develop_axis_recursive(
 					org->thickness_m = g->flower.corolla_depth_m.mean;
 					org->maturity = maturity * frt_scale;
 					org->health = 1.0f;
+				/* Light-based leaf health from growth-time Beer-Lambert grid */
+				if (inst->light_vox_valid) {
+					enum { LF_N = 12 };
+					float r_bound = inst->light_vox_bounds_r;
+					float h_bound = inst->light_vox_bounds_h;
+					if (r_bound > 0.1f && h_bound > 0.1f) {
+						float inv_2r = 1.0f / (2.0f * r_bound);
+						float inv_h  = 1.0f / h_bound;
+						int ix = (int)floorf(((org->attachment_pos.x + r_bound) * inv_2r) * (float)LF_N);
+						int iy = (int)floorf(((org->attachment_pos.y + r_bound) * inv_2r) * (float)LF_N);
+						int iz = (int)floorf((org->attachment_pos.z * inv_h) * (float)LF_N);
+						if (ix >= 0 && ix < LF_N && iy >= 0 && iy < LF_N && iz >= 0 && iz < LF_N) {
+							float loc_l = inst->light_vox_val[iz][iy][ix];
+							org->health = plant_clampf(0.25f + 0.75f * loc_l, 0.20f, 1.0f);
+						}
+					}
+				}
 					org->branch_order = order;
 					org->topo_hash = fl_hash;
 					if (u->first_organ == PLANT_INVALID_ID)
@@ -3322,6 +3417,23 @@ plant_sim_develop_axis_recursive(
 					org->thickness_m = fdia;
 					org->maturity = maturity * frt_scale;
 					org->health = 1.0f;
+				/* Light-based leaf health from growth-time Beer-Lambert grid */
+				if (inst->light_vox_valid) {
+					enum { LF_N = 12 };
+					float r_bound = inst->light_vox_bounds_r;
+					float h_bound = inst->light_vox_bounds_h;
+					if (r_bound > 0.1f && h_bound > 0.1f) {
+						float inv_2r = 1.0f / (2.0f * r_bound);
+						float inv_h  = 1.0f / h_bound;
+						int ix = (int)floorf(((org->attachment_pos.x + r_bound) * inv_2r) * (float)LF_N);
+						int iy = (int)floorf(((org->attachment_pos.y + r_bound) * inv_2r) * (float)LF_N);
+						int iz = (int)floorf((org->attachment_pos.z * inv_h) * (float)LF_N);
+						if (ix >= 0 && ix < LF_N && iy >= 0 && iy < LF_N && iz >= 0 && iz < LF_N) {
+							float loc_l = inst->light_vox_val[iz][iy][ix];
+							org->health = plant_clampf(0.25f + 0.75f * loc_l, 0.20f, 1.0f);
+						}
+					}
+				}
 					org->branch_order = order;
 					org->topo_hash = fr_hash;
 					if (u->first_organ == PLANT_INVALID_ID)
@@ -3422,6 +3534,64 @@ plant_sim_solve_pipe_model_allometry(PlantInstance *inst)
 	}
 }
 
+/* Build/update the 12^3 Beer-Lambert light competition voxel grid for growth-time phototropic steering
+ * and self-pruning. Runs in pass-1 coordinates inside plant_simulate_at_time so evaluation stays
+ * strictly chrono-deterministic and dt-invariant. */
+static inline void
+plant_build_light_voxel_grid(PlantInstance *plant, const PlantEnvironment *env)
+{
+	if (!plant) return;
+	plant->light_vox_valid = false;
+	if (plant->phenotype.organ_count < 6u || plant->phenotype.height_m < 0.5f)
+		return;
+	if (plant->genome.architecture.max_branch_order < 2u)
+		return;
+
+	enum { LF_N = 12 };
+	memset(plant->light_vox_lai, 0, sizeof(plant->light_vox_lai));
+
+	float r_bound = fmaxf(0.5f, plant->phenotype.crown_radius_m * 1.08f);
+	float h_bound = fmaxf(0.5f, plant->phenotype.height_m * 1.05f);
+	float inv_2r  = 1.0f / (2.0f * r_bound);
+	float inv_h   = 1.0f / h_bound;
+
+	for (uint32_t i = 0u; i < plant->phenotype.organ_count; i++) {
+		const PlantOrgan *o = &plant->phenotype.organs[i];
+		if (o->type != PLANT_ORGAN_LEAF) continue;
+		int ix = (int)floorf(((o->attachment_pos.x + r_bound) * inv_2r) * (float)LF_N);
+		int iy = (int)floorf(((o->attachment_pos.y + r_bound) * inv_2r) * (float)LF_N);
+		int iz = (int)floorf((o->attachment_pos.z * inv_h) * (float)LF_N);
+		if (ix < 0) ix = 0; else if (ix >= LF_N) ix = LF_N - 1;
+		if (iy < 0) iy = 0; else if (iy >= LF_N) iy = LF_N - 1;
+		if (iz < 0) iz = 0; else if (iz >= LF_N) iz = LF_N - 1;
+		plant->light_vox_lai[iz][iy][ix] += o->length_m * o->width_m * 0.72f;
+	}
+
+	float porosity = plant_clampf(plant->genome.leaf.canopy_porosity, 0.15f, 0.92f);
+	float cell_w = (2.0f * r_bound) / (float)LF_N;
+	float k_ext = (1.15f - 0.75f * porosity) / fmaxf(1e-4f, cell_w * cell_w);
+	float base_sun = plant_clampf(env->sunlight, 0.25f, 1.25f);
+
+	for (int iy = 0; iy < LF_N; iy++) {
+		for (int ix = 0; ix < LF_N; ix++) {
+			float accum_tau = 0.0f;
+			for (int iz = LF_N - 1; iz >= 0; iz--) {
+				float fx = ((float)ix + 0.5f) / (float)LF_N * 2.0f - 1.0f;
+				float fy = ((float)iy + 0.5f) / (float)LF_N * 2.0f - 1.0f;
+				float r_norm = sqrtf(fx * fx + fy * fy);
+				float sky_side = plant_clampf(r_norm * 0.48f, 0.0f, 0.45f);
+				float direct_l = base_sun * expf(-accum_tau * 0.32f);
+				plant->light_vox_val[iz][iy][ix] = plant_clampf(direct_l * (1.0f - sky_side) + base_sun * sky_side, 0.08f, 1.25f);
+				accum_tau += plant->light_vox_lai[iz][iy][ix] * k_ext;
+			}
+		}
+	}
+
+	plant->light_vox_bounds_r = r_bound;
+	plant->light_vox_bounds_h = h_bound;
+	plant->light_vox_valid = true;
+}
+
 /* Primary Chrono-Deterministic Evaluator:
  * Evaluates a plant's exact PlantPhenotype at age `target_age_days` given optional
  * ephemeral delta records `deltas[0..delta_count-1]`.
@@ -3441,6 +3611,7 @@ plant_simulate_at_time(PlantInstance *plant,
 	if (!env) env = &default_env;
 
 	plant->age_days = fmaxf(0.0f, target_age_days);
+	plant->light_vox_valid = false;
 	plant_phenotype_reset(&plant->phenotype);
 	if (plant->age_days <= 1e-4f || !plant->phenotype.axes || !plant->phenotype.units)
 		return;
@@ -3461,40 +3632,50 @@ plant_simulate_at_time(PlantInstance *plant,
 
 	uint64_t root_seed = plant_mix64(plant->genome.genetic_seed ^ PLANT_TOPO_ROOT_SALT);
 
-	for (uint8_t s = 0u; s < stem_count; s++) {
-		uint64_t stem_hash = plant_topo_step_lateral(root_seed, 0u, s);
-		PlantVec3 base_pos = plant_v3(0.0f, 0.0f, 0.0f);
-		PlantVec3 base_dir = plant_v3(0.0f, 0.0f, 1.0f);
-
-		if (stem_count > 1u) {
-			float ang = (6.2831853f * (float)s) / (float)stem_count +
-			            0.25f * plant_hash_normal01(stem_hash, PLANT_CH_ROLL_VAR);
-			float spread_r = 0.04f + 0.02f * (float)stem_count;
-			base_pos = plant_v3(cosf(ang) * spread_r, sinf(ang) * spread_r, 0.0f);
-			float tilt = 0.14f + 0.04f * (float)s;
-			base_dir = plant_v3_norm(plant_v3(cosf(ang) * tilt, sinf(ang) * tilt, 1.0f));
+	int max_passes = (plant->genome.architecture.max_branch_order >= 2u) ? 2 : 1;
+	for (int pass = 0; pass < max_passes; pass++) {
+		if (pass == 1) {
+			plant_build_light_voxel_grid(plant, env);
+			if (!plant->light_vox_valid)
+				break;
+			plant_phenotype_reset(&plant->phenotype);
 		}
+		for (uint8_t s = 0u; s < stem_count; s++) {
+			uint64_t stem_hash = plant_topo_step_lateral(root_seed, 0u, s);
+			PlantVec3 base_pos = plant_v3(0.0f, 0.0f, 0.0f);
+			PlantVec3 base_dir = plant_v3(0.0f, 0.0f, 1.0f);
 
-		/* Multi-stem clumps stagger secondary culm emergence slightly */
-		float stem_age = eff_plant_age * (1.0f - 0.06f * (float)s);
-		if (stem_age > 0.0f) {
-			plant_sim_develop_axis_recursive(
-				plant, env,
-				plant->age_days,
-				stem_age,
-				tau_eff,
-				PLANT_INVALID_ID,
-				PLANT_INVALID_ID,
-				PLANT_INVALID_ID,
-				0u,
-				stem_hash,
-				base_pos,
-				base_dir,
-				root_fol_eta,
-				root_frt_eta,
-				deltas, delta_count);
+			if (stem_count > 1u) {
+				float ang = (6.2831853f * (float)s) / (float)stem_count +
+				            0.25f * plant_hash_normal01(stem_hash, PLANT_CH_ROLL_VAR);
+				float spread_r = 0.04f + 0.02f * (float)stem_count;
+				base_pos = plant_v3(cosf(ang) * spread_r, sinf(ang) * spread_r, 0.0f);
+				float tilt = 0.14f + 0.04f * (float)s;
+				base_dir = plant_v3_norm(plant_v3(cosf(ang) * tilt, sinf(ang) * tilt, 1.0f));
+			}
+
+			/* Multi-stem clumps stagger secondary culm emergence slightly */
+			float stem_age = eff_plant_age * (1.0f - 0.06f * (float)s);
+			if (stem_age > 0.0f) {
+				plant_sim_develop_axis_recursive(
+					plant, env,
+					plant->age_days,
+					stem_age,
+					tau_eff,
+					PLANT_INVALID_ID,
+					PLANT_INVALID_ID,
+					PLANT_INVALID_ID,
+					0u,
+					stem_hash,
+					base_pos,
+					base_dir,
+					root_fol_eta,
+					root_frt_eta,
+					deltas, delta_count);
+			}
 		}
 	}
+	plant->light_vox_valid = false;
 
 	/* Solve basipetal Da Vinci pipe-model vascular radii across the developed MTG */
 	plant_sim_solve_pipe_model_allometry(plant);
