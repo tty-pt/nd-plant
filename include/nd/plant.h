@@ -611,4 +611,6 @@ nd_plant_slot_meta(const plant_tile_t *pd, unsigned side, int32_t rx, int32_t ry
 	return 1;
 }
 
+#include <nd/plant_mesh3d.h>
+
 #endif /* !ND_PLANT_H */

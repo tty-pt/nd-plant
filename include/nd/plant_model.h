@@ -348,6 +348,7 @@ typedef struct {
 	float                   orthotropy;            /* [-1..1] +1=erect skyward, 0=plagiotropic, -1=pendulous/weeping */
 	float                   tortuosity;            /* [0..1] per-internode gnarl / helical twist */
 	float                   branch_shed_threshold; /* [0..1] shade self-pruning sensitivity */
+	float                   crown_flatness;        /* [0.15..1.50] vertical crown aspect (0.26=tabular umbrella, 0.75=dome, 1.35=columnar) */
 } PlantArchitectureGenome;
 
 typedef struct {
@@ -390,6 +391,7 @@ typedef struct {
 	float branch_length_coefficient;
 	float crown_width_height_ratio;
 	float crown_asymmetry;
+	float basal_radius_ratio;        /* basal trunk radius relative to crown width (e.g. 0.034=birch, 0.072=oak) */
 	float tip_min_radius_m;          /* minimum radius of a newly formed terminal twig */
 	float radius_taper;              /* passive conductive taper along internodes */
 	float wood_density;
@@ -436,6 +438,7 @@ typedef struct {
 	float               chlorophyll_index;
 	float               anthocyanin_index;
 	float               carotenoid_index;
+	float               canopy_porosity;  /* [0.15..0.75] sky gap / foliar porosity fraction */
 	float               retention_order_threshold; /* max branch order that retains foliage (e.g. twigs only) */
 	PlantColor4         adaxial_deep;
 	PlantColor4         adaxial_mid;
@@ -1645,6 +1648,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 	g->meristem.vigor_decay_per_order = 0.68f;
 
 	g->allometry.pipe_model_exponent = 2.10f;
+	g->allometry.basal_radius_ratio = 0.048f;
 	g->allometry.tip_min_radius_m = 0.012f;
 	g->allometry.radius_taper = 0.015f;
 	g->allometry.wood_density = 0.65f;
@@ -1652,6 +1656,9 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 	g->allometry.root_flare_strength = 0.38f;
 	g->allometry.bark_roughness = 0.55f;
 	g->allometry.bark_thickness_ratio = 0.08f;
+
+	g->architecture.crown_flatness = 0.75f;
+	g->architecture.branch_shed_threshold = 0.30f;
 
 	g->leaf.complexity = PLANT_LEAF_SIMPLE;
 	g->leaf.shape = PLANT_LEAF_SHAPE_ELLIPTIC;
@@ -1667,6 +1674,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 	g->leaf.leaflet_count = 1u;
 	g->leaf.leaves_per_node = 3u;
 	g->leaf.chlorophyll_index = 0.80f;
+	g->leaf.canopy_porosity = 0.46f;
 	g->leaf.retention_order_threshold = 1.0f; /* leaves on terminal & sub-terminal twigs */
 
 	g->flower.has_flowers = false;
@@ -1730,11 +1738,14 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.fork_probability = 0.22f;
 		g->architecture.orthotropy = 0.35f;
 		g->architecture.tortuosity = 0.38f;
+		g->architecture.crown_flatness = 0.54f;
+		g->architecture.branch_shed_threshold = 0.68f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_WHORLED;
 		g->phyllotaxis.buds_per_node = 3u;
 		g->phyllotaxis.divergence_angle_deg = 120.0f;
 		g->meristem.lateral_bud_probability = 0.78f;
 		g->allometry.pipe_model_exponent = 2.08f;
+		g->allometry.basal_radius_ratio = 0.044f;
 		g->allometry.tip_min_radius_m = 0.026f;
 		g->allometry.root_flare_strength = 0.44f;
 		g->allometry.bark_class = 1u; /* ND_PLANT_BARK_SCOTS */
@@ -1747,6 +1758,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.45f, 0.06f, 0.28f, 0.65f };
 		g->leaf.leaflet_count = 7u;
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.48f;
 		g->leaf.adaxial_deep = plant_rgba_u8(16, 40, 28, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(30, 68, 46, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(52, 102, 66, 255);
@@ -1775,11 +1787,13 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.fork_probability = 0.01f;
 		g->architecture.orthotropy = 0.85f;
 		g->architecture.tortuosity = 0.08f;
+		g->architecture.crown_flatness = 0.45f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_WHORLED;
 		g->phyllotaxis.buds_per_node = 4u;
 		g->phyllotaxis.divergence_angle_deg = 90.0f;
 		g->meristem.lateral_bud_probability = 0.88f;
 		g->allometry.pipe_model_exponent = 2.18f;
+		g->allometry.basal_radius_ratio = 0.052f;
 		g->allometry.tip_min_radius_m = 0.025f;
 		g->allometry.root_flare_strength = 0.50f;
 		g->allometry.bark_class = 0u;
@@ -1792,6 +1806,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.42f, 0.05f, 0.25f, 0.60f };
 		g->leaf.leaflet_count = 8u;
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.52f;
 		g->leaf.adaxial_deep = plant_rgba_u8(12, 36, 24, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(24, 62, 40, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(44, 94, 58, 255);
@@ -1817,9 +1832,11 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.clear_bole_fraction = 0.34f;
 		g->architecture.orthotropy = -0.35f; /* high arching then weeping pendulous tips */
 		g->architecture.tortuosity = 0.26f;
+		g->architecture.crown_flatness = 0.78f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_SPIRAL;
 		g->phyllotaxis.buds_per_node = 2u;
 		g->allometry.pipe_model_exponent = 2.15f;
+		g->allometry.basal_radius_ratio = 0.034f;
 		g->allometry.tip_min_radius_m = 0.017f;
 		g->allometry.stiffness_young_modulus = 0.38f;
 		g->allometry.bark_class = 2u; /* ND_PLANT_BARK_BIRCH */
@@ -1833,6 +1850,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.65f, 0.06f, 0.45f, 0.85f };
 		g->leaf.curvature = (PlantDistribution){ 0.48f, 0.08f, 0.20f, 0.85f };
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.58f;
 		g->leaf.adaxial_deep = plant_rgba_u8(46, 72, 20, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(86, 124, 34, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(138, 174, 52, 255);
@@ -1858,6 +1876,8 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.clear_bole_fraction = 0.15f;
 		g->architecture.orthotropy = 0.78f;
 		g->architecture.tortuosity = 0.10f;
+		g->architecture.crown_flatness = 0.85f;
+		g->allometry.basal_radius_ratio = 0.032f;
 		g->allometry.tip_min_radius_m = 0.007f;
 		g->allometry.root_flare_strength = 0.10f;
 		g->allometry.bark_class = 5u; /* ND_PLANT_BARK_HERB */
@@ -1869,6 +1889,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.blade_length_m = (PlantDistribution){ 0.14f, 0.02f, 0.08f, 0.22f };
 		g->leaf.width_ratio = (PlantDistribution){ 0.28f, 0.04f, 0.18f, 0.42f };
 		g->leaf.leaves_per_node = 3u;
+		g->leaf.canopy_porosity = 0.45f;
 		g->leaf.retention_order_threshold = 0.0f;
 		g->leaf.adaxial_deep = plant_rgba_u8(36, 74, 32, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(58, 110, 48, 255);
@@ -1902,7 +1923,9 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.clear_bole_fraction = 0.26f;
 		g->architecture.orthotropy = 0.28f;
 		g->architecture.tortuosity = 0.32f;
+		g->architecture.crown_flatness = 0.84f;
 		g->phyllotaxis.buds_per_node = 2u;
+		g->allometry.basal_radius_ratio = 0.036f;
 		g->allometry.tip_min_radius_m = 0.019f;
 		g->allometry.bark_class = 2u;
 		g->allometry.bark_dark  = plant_rgba_u8(54, 48, 44, 255);
@@ -1914,6 +1937,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.blade_length_m = (PlantDistribution){ 0.56f, 0.07f, 0.30f, 0.82f };
 		g->leaf.width_ratio = (PlantDistribution){ 0.72f, 0.06f, 0.50f, 0.90f };
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.50f;
 		g->leaf.adaxial_deep = plant_rgba_u8(28, 58, 26, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(52, 96, 42, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(86, 138, 62, 255);
@@ -1938,11 +1962,13 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.clear_bole_fraction = 0.14f;
 		g->architecture.orthotropy = 0.90f;
 		g->architecture.tortuosity = 0.05f;
+		g->architecture.crown_flatness = 0.42f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_WHORLED;
 		g->phyllotaxis.buds_per_node = 4u;
 		g->phyllotaxis.divergence_angle_deg = 90.0f;
 		g->meristem.lateral_bud_probability = 0.90f;
 		g->allometry.pipe_model_exponent = 2.20f;
+		g->allometry.basal_radius_ratio = 0.054f;
 		g->allometry.tip_min_radius_m = 0.025f;
 		g->allometry.root_flare_strength = 0.48f;
 		g->allometry.bark_class = 0u;
@@ -1955,6 +1981,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.44f, 0.05f, 0.28f, 0.62f };
 		g->leaf.leaflet_count = 8u;
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.48f;
 		g->leaf.adaxial_deep = plant_rgba_u8(14, 38, 32, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(28, 64, 52, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(52, 98, 78, 255);
@@ -1985,8 +2012,10 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.clear_bole_fraction = 0.22f;
 		g->architecture.orthotropy = 0.95f;
 		g->architecture.tortuosity = 0.04f;
+		g->architecture.crown_flatness = 1.35f;
 		g->meristem.lateral_bud_probability = 0.28f;
 		g->allometry.pipe_model_exponent = 2.40f;
+		g->allometry.basal_radius_ratio = 0.095f;
 		g->allometry.tip_min_radius_m = 0.085f;
 		g->allometry.radius_taper = 0.004f;
 		g->allometry.root_flare_strength = 0.05f;
@@ -1997,6 +2026,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.complexity = PLANT_LEAF_SCALE; /* areole spines */
 		g->leaf.blade_length_m = (PlantDistribution){ 0.06f, 0.01f, 0.03f, 0.10f };
 		g->leaf.leaves_per_node = 2u;
+		g->leaf.canopy_porosity = 0.20f;
 		g->leaf.adaxial_deep = plant_rgba_u8(128, 104, 48, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(164, 134, 62, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(188, 158, 78, 255);
@@ -2029,8 +2059,10 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.fork_probability = 0.58f;
 		g->architecture.orthotropy = 0.08f; /* tabular horizontal savannah umbrella */
 		g->architecture.tortuosity = 0.48f;
+		g->architecture.crown_flatness = 0.26f;
 		g->phyllotaxis.buds_per_node = 3u;
 		g->allometry.pipe_model_exponent = 2.05f;
+		g->allometry.basal_radius_ratio = 0.038f;
 		g->allometry.tip_min_radius_m = 0.024f;
 		g->allometry.root_flare_strength = 0.42f;
 		g->allometry.bark_class = 0u;
@@ -2043,6 +2075,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.78f, 0.08f, 0.50f, 0.98f };
 		g->leaf.leaflet_count = 6u;
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.56f;
 		g->leaf.adaxial_deep = plant_rgba_u8(38, 58, 18, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(68, 96, 30, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(106, 138, 46, 255);
@@ -2066,6 +2099,8 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basitony = 0.72f;
 		g->architecture.clear_bole_fraction = 0.12f;
 		g->architecture.orthotropy = 0.58f;
+		g->architecture.crown_flatness = 0.64f;
+		g->allometry.basal_radius_ratio = 0.048f;
 		g->allometry.tip_min_radius_m = 0.009f;
 		g->allometry.root_flare_strength = 0.55f; /* exposed orange taproot crown */
 		g->allometry.bark_class = 5u;
@@ -2078,6 +2113,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.58f, 0.06f, 0.38f, 0.80f };
 		g->leaf.leaflet_count = 5u;
 		g->leaf.leaves_per_node = 3u;
+		g->leaf.canopy_porosity = 0.52f;
 		g->leaf.retention_order_threshold = 0.0f;
 		g->leaf.adaxial_deep = plant_rgba_u8(28, 68, 26, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(52, 108, 42, 255);
@@ -2110,7 +2146,9 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.clear_bole_fraction = 0.14f;
 		g->architecture.orthotropy = 0.35f;
 		g->architecture.tortuosity = 0.34f;
+		g->architecture.crown_flatness = 0.78f;
 		g->phyllotaxis.buds_per_node = 2u;
+		g->allometry.basal_radius_ratio = 0.045f;
 		g->allometry.tip_min_radius_m = 0.010f;
 		g->allometry.bark_class = 5u;
 		g->allometry.bark_dark  = plant_rgba_u8(34, 68, 24, 255);
@@ -2123,6 +2161,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.66f, 0.06f, 0.45f, 0.88f };
 		g->leaf.leaflet_count = 5u;
 		g->leaf.leaves_per_node = 3u;
+		g->leaf.canopy_porosity = 0.42f;
 		g->leaf.retention_order_threshold = 0.0f;
 		g->leaf.adaxial_deep = plant_rgba_u8(24, 62, 20, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(46, 98, 34, 255);
@@ -2161,9 +2200,11 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.fork_probability = 0.42f;
 		g->architecture.orthotropy = 0.20f;
 		g->architecture.tortuosity = 0.52f;
+		g->architecture.crown_flatness = 0.72f;
 		g->phyllotaxis.buds_per_node = 3u;
 		g->meristem.lateral_bud_probability = 0.82f;
 		g->allometry.pipe_model_exponent = 2.02f;
+		g->allometry.basal_radius_ratio = 0.072f;
 		g->allometry.tip_min_radius_m = 0.034f;
 		g->allometry.root_flare_strength = 0.72f;
 		g->allometry.bark_class = 0u;
@@ -2177,6 +2218,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.68f, 0.07f, 0.48f, 0.88f };
 		g->leaf.lobe_depth = (PlantDistribution){ 0.42f, 0.06f, 0.20f, 0.60f };
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.44f;
 		g->leaf.adaxial_deep = plant_rgba_u8(18, 48, 18, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(36, 82, 30, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(64, 122, 46, 255);
@@ -2203,8 +2245,10 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.fork_probability = 0.38f;
 		g->architecture.orthotropy = -0.78f; /* strong weeping cascade on distal axes */
 		g->architecture.tortuosity = 0.38f;
+		g->architecture.crown_flatness = 0.88f;
 		g->phyllotaxis.buds_per_node = 3u;
 		g->allometry.pipe_model_exponent = 2.06f;
+		g->allometry.basal_radius_ratio = 0.064f;
 		g->allometry.tip_min_radius_m = 0.025f;
 		g->allometry.stiffness_young_modulus = 0.22f;
 		g->allometry.root_flare_strength = 0.58f;
@@ -2218,6 +2262,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.34f, 0.05f, 0.20f, 0.50f };
 		g->leaf.curvature = (PlantDistribution){ 0.78f, 0.08f, 0.45f, 0.98f };
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.54f;
 		g->leaf.adaxial_deep = plant_rgba_u8(34, 68, 24, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(64, 114, 38, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(104, 162, 58, 255);
@@ -2242,12 +2287,14 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.clear_bole_fraction = 0.32f;
 		g->architecture.orthotropy = 0.42f;
 		g->architecture.tortuosity = 0.22f;
+		g->architecture.crown_flatness = 0.84f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_DECUSSATE;
 		g->phyllotaxis.buds_per_node = 2u;
 		g->phyllotaxis.divergence_angle_deg = 90.0f;
 		g->phyllotaxis.decussate_phase_flip = true;
 		g->meristem.lateral_bud_probability = 0.84f;
 		g->allometry.pipe_model_exponent = 2.08f;
+		g->allometry.basal_radius_ratio = 0.060f;
 		g->allometry.tip_min_radius_m = 0.029f;
 		g->allometry.root_flare_strength = 0.56f;
 		g->allometry.bark_class = 0u;
@@ -2262,6 +2309,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.88f, 0.07f, 0.68f, 1.05f };
 		g->leaf.leaflet_count = 5u;
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.38f;
 		g->leaf.adaxial_deep = plant_rgba_u8(20, 54, 20, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(42, 92, 34, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(74, 136, 52, 255);
@@ -2287,11 +2335,13 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.fork_probability = 0.52f;
 		g->architecture.orthotropy = 0.16f;
 		g->architecture.tortuosity = 0.72f; /* ancient twisted Mediterranean trunk */
+		g->architecture.crown_flatness = 0.58f;
 		g->phyllotaxis.mode = PLANT_PHYLLO_DECUSSATE;
 		g->phyllotaxis.buds_per_node = 2u;
 		g->phyllotaxis.decussate_phase_flip = true;
 		g->meristem.lateral_bud_probability = 0.82f;
 		g->allometry.pipe_model_exponent = 1.96f;
+		g->allometry.basal_radius_ratio = 0.078f;
 		g->allometry.tip_min_radius_m = 0.032f;
 		g->allometry.root_flare_strength = 0.78f;
 		g->allometry.bark_class = 3u; /* ND_PLANT_BARK_FLUTED */
@@ -2303,6 +2353,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.blade_length_m = (PlantDistribution){ 0.64f, 0.08f, 0.36f, 0.92f };
 		g->leaf.width_ratio = (PlantDistribution){ 0.45f, 0.05f, 0.30f, 0.65f };
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.46f;
 		g->leaf.adaxial_deep = plant_rgba_u8(38, 56, 38, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(68, 94, 66, 255);
 		g->leaf.adaxial_lit  = plant_rgba_u8(108, 138, 102, 255);
@@ -2327,6 +2378,8 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basitony = 0.90f;
 		g->architecture.clear_bole_fraction = 0.05f;
 		g->architecture.orthotropy = 0.82f;
+		g->architecture.crown_flatness = 0.45f;
+		g->allometry.basal_radius_ratio = 0.036f;
 		g->allometry.tip_min_radius_m = 0.005f;
 		g->allometry.root_flare_strength = 0.05f;
 		g->allometry.bark_class = 5u;
@@ -2338,6 +2391,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.blade_length_m = (PlantDistribution){ 0.085f, 0.01f, 0.05f, 0.13f };
 		g->leaf.width_ratio = (PlantDistribution){ 0.62f, 0.06f, 0.42f, 0.82f };
 		g->leaf.leaves_per_node = 4u;
+		g->leaf.canopy_porosity = 0.35f;
 		g->leaf.retention_order_threshold = 0.0f;
 		g->leaf.adaxial_deep = plant_rgba_u8(28, 68, 24, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(52, 108, 40, 255);
@@ -2371,6 +2425,8 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->architecture.basitony = 0.92f;
 		g->architecture.clear_bole_fraction = 0.10f;
 		g->architecture.orthotropy = 0.92f;
+		g->architecture.crown_flatness = 1.20f;
+		g->allometry.basal_radius_ratio = 0.038f;
 		g->allometry.tip_min_radius_m = 0.011f;
 		g->allometry.root_flare_strength = 0.08f;
 		g->allometry.bark_class = 5u;
@@ -2384,6 +2440,7 @@ plant_species_init_preset(PlantSpeciesDef *sp, uint32_t spec_idx)
 		g->leaf.width_ratio = (PlantDistribution){ 0.14f, 0.02f, 0.08f, 0.22f };
 		g->leaf.curvature = (PlantDistribution){ 0.24f, 0.05f, 0.05f, 0.45f };
 		g->leaf.leaves_per_node = 3u;
+		g->leaf.canopy_porosity = 0.40f;
 		g->leaf.retention_order_threshold = 0.0f;
 		g->leaf.adaxial_deep = plant_rgba_u8(24, 58, 32, 255);
 		g->leaf.adaxial_mid  = plant_rgba_u8(46, 94, 52, 255);
@@ -2670,43 +2727,47 @@ plant_sim_develop_axis_recursive(
 	float order_vigor = powf(plant_clampf(g->meristem.vigor_decay_per_order, 0.30f, 0.90f), (float)order);
 	float order_tau = tau_plastochron * powf(0.68f, (float)order);
 	bool is_tree_arch = (g->architecture.max_branch_order >= 3u);
-	bool is_massart = (g->architecture.model == PLANT_ARCH_MASSART);
 	bool is_multi_stem = (g->architecture.basal_stem_count >= 2u);
-	bool is_deliquescent = (is_tree_arch && !is_massart &&
-	                        (g->architecture.apical_dominance < 0.78f ||
-	                         g->architecture.fork_probability > 0.24f ||
-	                         g->architecture.clear_bole_fraction >= 0.50f));
+	float crown_flat = (g->architecture.crown_flatness > 0.05f) ? g->architecture.crown_flatness : 0.75f;
+	float tabular_t = is_tree_arch ? plant_clampf((0.66f - crown_flat) / 0.42f, 0.0f, 1.0f) : 0.0f;
+	bool is_excurrent_spire = (is_tree_arch &&
+	                           g->architecture.apical_dominance >= 0.85f &&
+	                           g->phyllotaxis.buds_per_node >= 3u);
+	bool is_sympodial = (is_tree_arch && !is_excurrent_spire &&
+	                     (g->architecture.apical_dominance < 0.78f ||
+	                      g->architecture.fork_probability > 0.24f ||
+	                      g->architecture.clear_bole_fraction >= 0.50f));
 
 	uint32_t max_nodes_for_order = 1u;
 	if (order == 0u) {
 		if (g->architecture.max_branch_order <= 1u)
 			max_nodes_for_order = 3u;
-		else if (is_massart)
+		else if (is_excurrent_spire)
 			max_nodes_for_order = 7u;
 		else if (is_tree_arch)
 			max_nodes_for_order = 5u;
 		else
 			max_nodes_for_order = 4u;
 	} else if (order == 1u) {
-		max_nodes_for_order = (is_tree_arch && !is_massart && !is_multi_stem) ? 3u : 2u;
+		max_nodes_for_order = (is_tree_arch && !is_excurrent_spire && !is_multi_stem) ? 3u : 2u;
 	} else if (order == 2u) {
-		max_nodes_for_order = (is_tree_arch && !is_massart) ? 2u : 1u;
+		max_nodes_for_order = (is_tree_arch && !is_excurrent_spire) ? 2u : 1u;
 	} else {
 		max_nodes_for_order = 1u;
 	}
 
 	uint32_t max_children_for_axis = 2u;
 	if (order == 0u) {
-		if (is_massart)
+		if (is_excurrent_spire)
 			max_children_for_axis = 18u; /* 6 crown whorls x 3 plagiotropic branches all the way to spire apex */
 		else if (is_tree_arch)
-			max_children_for_axis = is_multi_stem ? 4u : 7u;
+			max_children_for_axis = is_multi_stem ? 4u : 8u;
 		else
 			max_children_for_axis = 4u;
 	} else if (order == 1u) {
-		max_children_for_axis = is_massart ? 2u : (is_multi_stem ? 2u : 3u);
+		max_children_for_axis = is_excurrent_spire ? 2u : (is_multi_stem ? 2u : 3u);
 	} else if (order == 2u) {
-		max_children_for_axis = is_massart ? 1u : 2u;
+		max_children_for_axis = is_excurrent_spire ? 1u : 2u;
 	}
 
 	float exact_nodes = eff_axis_age_days / fmaxf(1.0f, order_tau);
@@ -2719,7 +2780,7 @@ plant_sim_develop_axis_recursive(
 	if (total_nodes == 0u)
 		return;
 
-	/* Conical whorl taper for Massart conifers: upper-spire lateral branches scale down smoothly toward the apex */
+	/* Conical whorl taper for excurrent spires: upper-spire lateral branches scale down smoothly toward the apex */
 	float parent_rel_z = 0.0f;
 	if (order >= 1u && parent_unit_id != PLANT_INVALID_ID && parent_unit_id < pheno->unit_count) {
 		const PlantGrowthUnit *pu = &pheno->units[parent_unit_id];
@@ -2793,20 +2854,27 @@ plant_sim_develop_axis_recursive(
 			break;
 
 		float rel_height = (float)(n + 1u) / (float)max_nodes_for_order;
+		/* Normalized position along the axis [0..1] for accurate clear-bole gating */
+		float node_bole_frac = (max_nodes_for_order > 1u)
+			? ((float)n / (float)(max_nodes_for_order - 1u))
+			: 1.0f;
 
 		/* Sample internode length & directional tropism/tortuosity from cur_hash */
 		float base_len = plant_sample_distribution(&g->architecture.internode_length_m, cur_hash, PLANT_CH_INTERNODE_LEN);
 		float order_len_scale = powf(0.76f, (float)order);
-		if (is_massart && order >= 1u) {
-			/* Conical spire profile: lower conifer whorls reach wide; upper whorls taper smoothly to the spire leader */
+		if (is_excurrent_spire && order >= 1u) {
+			/* Conical spire profile: lower whorls reach wide; upper whorls taper smoothly to the spire leader */
 			float cone_taper = 1.24f * (1.0f - 0.74f * parent_rel_z);
 			order_len_scale *= plant_clampf(cone_taper, 0.24f, 1.24f);
-		} else if (is_deliquescent && order == 0u && rel_height > g->architecture.clear_bole_fraction) {
-			/* Above the crown break, the sympodial leader shortens as energy divides into codominant boughs */
-			order_len_scale *= 0.82f;
-		} else if (is_deliquescent && order == 1u) {
-			/* Primary scaffold boughs of Oak/Acacia/Olive/Willow carry broad horizontal reach */
-			order_len_scale *= 1.12f;
+		} else if (is_sympodial && order == 0u && node_bole_frac >= g->architecture.clear_bole_fraction) {
+			/* Above the crown break, the sympodial leader shortens as energy divides into codominant V-vase boughs */
+			order_len_scale *= (0.82f - 0.34f * tabular_t);
+		} else if (is_sympodial && order == 1u) {
+			/* Primary scaffold boughs carry broad diagonal V-vase reach up to the canopy table */
+			order_len_scale *= (1.14f + 0.32f * tabular_t);
+		} else if (is_sympodial && order >= 2u && tabular_t > 0.1f) {
+			/* Secondary/tertiary tabular shoots spread across the upper canopy table */
+			order_len_scale *= (1.0f + 0.22f * tabular_t);
 		}
 		float taper_along_axis = 1.0f - 0.10f * ((float)n / (float)max_nodes_for_order);
 		float unit_len = base_len * order_len_scale * taper_along_axis * maturity;
@@ -2822,21 +2890,21 @@ plant_sim_develop_axis_recursive(
 		/* Orthotropy / gravitropism / phototropism / sympodial crown-break / weeping bending */
 		float ortho = g->architecture.orthotropy;
 		if (order == 0u) {
-			if (is_deliquescent && rel_height > g->architecture.clear_bole_fraction && n >= 1u) {
+			if (is_sympodial && node_bole_frac >= g->architecture.clear_bole_fraction && n >= 1u) {
 				/* Sympodial crown break: above the clear bole, the primary trunk deflects away from
-				 * a rigid vertical pole so the upper crown forms a true fractal fork network */
+				 * a rigid vertical pole so the upper crown forms a true fractal V-fork network */
 				float sym_ang = (accum_phyllo_deg + 137.5f * (float)n) * (3.14159265f / 180.0f);
-				float sym_mag = (1.05f - g->architecture.apical_dominance) * 0.46f + tort * 0.25f;
+				float sym_mag = (1.05f - g->architecture.apical_dominance) * (0.52f + 0.48f * tabular_t) + tort * 0.25f;
 				steered.x += cosf(sym_ang) * sym_mag;
 				steered.y += sinf(sym_ang) * sym_mag;
-				steered.z += 0.22f * g->plasticity.gravitropism_strength;
+				steered.z += (0.22f - 0.14f * tabular_t) * g->plasticity.gravitropism_strength;
 			} else {
-				/* Excurrent conifer spire or lower clear bole is strongly orthotropic */
+				/* Excurrent spire or lower clear bole is strongly orthotropic */
 				steered.z += 0.48f * g->plasticity.gravitropism_strength;
 			}
-		} else if (is_massart) {
-			/* Hallé-Oldeman Massart model: lateral whorl branches are strictly plagiotropic
-			 * (sweeping outward horizontally with a gentle catenary dip and upturned distal tips) */
+		} else if (is_excurrent_spire) {
+			/* Monopodial whorled spire: lateral whorl branches sweep outward plagiotropically
+			 * with a gentle horizontal stance and upturned distal tips (never diving into the ground) */
 			float horiz_xy = sqrtf(steered.x * steered.x + steered.y * steered.y);
 			if (horiz_xy < 0.25f) {
 				float fallback_az = accum_phyllo_deg * (3.14159265f / 180.0f);
@@ -2844,30 +2912,56 @@ plant_sim_develop_axis_recursive(
 				steered.y += sinf(fallback_az) * 0.75f;
 			}
 			steered.z = (order == 1u)
-				? ((n == 0u) ? -0.14f : 0.04f)
-				: -0.06f;
+				? ((n == 0u) ? -0.04f : 0.06f)
+				: 0.02f;
 		} else {
 			/* Centrifugal phototropism: lateral boughs steer outward away from the shaded trunk core */
 			float r_xy = sqrtf(cur_pos.x * cur_pos.x + cur_pos.y * cur_pos.y);
-			if (r_xy > 0.08f) {
-				float centrifugal = (0.18f + 0.08f * (float)order);
+			if (r_xy > 0.06f) {
+				float centrifugal = (0.18f + 0.08f * (float)order) * (1.0f + 0.30f * tabular_t);
 				steered.x += (cur_pos.x / r_xy) * centrifugal;
 				steered.y += (cur_pos.y / r_xy) * centrifugal;
 			}
-			/* Species orthotropy (positive=ascending, negative=weeping) */
-			float grav_pull = ortho * 0.36f - (1.0f - g->allometry.stiffness_young_modulus) * 0.26f * (float)order;
-			steered.z += grav_pull;
-			/* Tabular umbrella flattening (Acacia / Scots Pine upper crown) */
-			if (fabsf(ortho) < 0.22f && order >= 1u)
-				steered.z *= 0.48f;
+			if (ortho < -0.20f && order == 1u && n == 0u) {
+				/* Weeping architectures (e.g. Salix, Betula pendula): primary scaffold limbs
+				 * arch upward first to build a high structural dome before distal shoots cascade */
+				steered.z = fmaxf(0.34f, steered.z + 0.48f);
+			} else if (tabular_t > 0.05f && order == 1u) {
+				/* Low crown_flatness (tabular umbrella / high dome): primary order-1 scaffold limbs
+				 * ascend diagonally in a wide V-vase from the crown break up to the upper canopy table */
+				float target_climb = 0.40f + 0.28f * tabular_t;
+				steered.z = steered.z * (1.0f - 0.65f * tabular_t) + target_climb * tabular_t;
+				steered.z = fmaxf(steered.z, 0.28f + 0.22f * tabular_t);
+			} else if (tabular_t > 0.05f && order >= 2u) {
+				/* Secondary and tertiary shoots on tabular crowns flatten horizontally into stratified tiers */
+				steered.z = steered.z * (1.0f - 0.85f * tabular_t) + 0.08f * tabular_t;
+			} else {
+				/* Standard orthotropy (positive=ascending dome, negative=weeping distal shoots) */
+				float grav_pull = ortho * 0.36f - (1.0f - g->allometry.stiffness_young_modulus) * 0.24f * (float)order;
+				steered.z += grav_pull;
+			}
 		}
 		if (env) {
 			steered = plant_v3_add(steered, plant_v3_scale(env->mean_light_dir, g->plasticity.phototropism_strength * 0.16f));
 		}
 		cur_dir = plant_v3_norm(steered);
-		/* Prevent primary/secondary branches from plunging below ground */
-		if (cur_pos.z + cur_dir.z * unit_len < 0.04f && order <= 1u) {
-			cur_dir.z = fmaxf(0.05f, cur_dir.z);
+
+		/* Enforce genome-driven crown-base floor so lateral branches never plunge below the clear bole */
+		float min_branch_z = 0.05f;
+		if (is_tree_arch && order >= 1u) {
+			float ref_h = (pheno->height_m > 1.0f) ? pheno->height_m : (g->physiology.mature_height_m * 0.45f);
+			float floor_frac = (ortho < -0.25f)
+				? fmaxf(0.28f, g->architecture.clear_bole_fraction * 0.90f)
+				: fmaxf(0.22f, g->architecture.clear_bole_fraction * 0.95f);
+			if (order >= 2u && tabular_t > 0.25f) {
+				/* On tabular crowns, order>=2 canopy-table shoots sit above the ascending order-1 V-vase scaffold */
+				floor_frac = fmaxf(floor_frac, g->architecture.clear_bole_fraction + 0.26f * tabular_t);
+			}
+			min_branch_z = fmaxf(0.15f, ref_h * floor_frac);
+		}
+		if (cur_pos.z + cur_dir.z * unit_len < min_branch_z) {
+			float req_dz = (min_branch_z - cur_pos.z) / fmaxf(0.1f, unit_len);
+			cur_dir.z = fmaxf(cur_dir.z, plant_clampf(req_dz, 0.04f, 0.55f));
 			cur_dir = plant_v3_norm(cur_dir);
 		}
 
@@ -2924,7 +3018,7 @@ plant_sim_develop_axis_recursive(
 		/* Emit axillary buds & foliar/floral organs at this phytomer node */
 		uint8_t buds_here = g->phyllotaxis.buds_per_node;
 		if (buds_here == 0u) buds_here = 1u;
-		if (order >= 1u && !is_massart && buds_here > 2u)
+		if (order >= 1u && !is_excurrent_spire && buds_here > 2u)
 			buds_here = 2u;
 		float dist_from_apex = (float)(total_nodes - 1u - n);
 
@@ -2936,7 +3030,7 @@ plant_sim_develop_axis_recursive(
 
 		/* Positional activation profile (clear bole self-pruning vs acrotony/basitony) */
 		float pos_weight = 1.0f;
-		if (order == 0u && rel_height < g->architecture.clear_bole_fraction && total_nodes > 2u && n < total_nodes - 1u) {
+		if (order == 0u && node_bole_frac < g->architecture.clear_bole_fraction && total_nodes > 2u && n < total_nodes - 1u) {
 			pos_weight = 0.0f; /* self-pruned clear bole zone */
 		} else {
 			float acro = g->architecture.acrotony * rel_height;
@@ -2950,9 +3044,9 @@ plant_sim_develop_axis_recursive(
 
 		/* Limit per-node lateral child spawns on non-whorled trunks so lower nodes never starve the upper crown */
 		uint32_t node_children_spawned = 0u;
-		uint32_t max_children_this_node = (is_massart && order == 0u)
+		uint32_t max_children_this_node = (is_excurrent_spire && order == 0u)
 			? 3u
-			: ((order == 0u) ? (is_multi_stem ? 1u : 2u) : 1u);
+			: ((order == 0u) ? (is_multi_stem ? 1u : (tabular_t > 0.35f ? 3u : 2u)) : 1u);
 
 		for (uint8_t b = 0u; b < buds_here; b++) {
 			float az_deg = accum_phyllo_deg + (360.0f / (float)buds_here) * (float)b;
@@ -2960,11 +3054,11 @@ plant_sim_develop_axis_recursive(
 			PlantVec3 radial_dir = plant_v3_norm(
 				plant_v3_add(plant_v3_scale(U, cosf(az_rad)), plant_v3_scale(V, sinf(az_rad))));
 
-			/* On Massart conifers, order>=1 lateral branchlets fan out horizontally left/right (pectinate) */
-			if (is_massart && order >= 1u) {
+			/* On excurrent whorled spires, order>=1 lateral branchlets fan out horizontally left/right (pectinate) */
+			if (is_excurrent_spire && order >= 1u) {
 				PlantVec3 h_side = plant_v3_norm(plant_v3(-cur_dir.y, cur_dir.x, 0.0f));
 				float sign = (b & 1u) ? 1.0f : -1.0f;
-				radial_dir = plant_v3_norm(plant_v3(h_side.x * sign, h_side.y * sign, -0.05f));
+				radial_dir = plant_v3_norm(plant_v3(h_side.x * sign, h_side.y * sign, 0.02f));
 			}
 
 			float ins_deg = plant_sample_distribution(&g->architecture.branch_angle_deg,
@@ -3016,9 +3110,9 @@ plant_sim_develop_axis_recursive(
 				float p_break = g->meristem.lateral_bud_probability *
 				                (1.0f - 0.50f * apical_inhib) * pos_weight;
 				/* Guarantee active lateral scaffolds at every crown node on trees */
-				if (is_tree_arch && b == 0u)
+				if (is_tree_arch && (b == 0u || (tabular_t > 0.35f && order == 0u)))
 					p_break = fmaxf(p_break, 0.94f);
-				else if (is_massart && order == 0u)
+				else if (is_excurrent_spire && order == 0u)
 					p_break = fmaxf(p_break, 0.90f);
 
 				float draw = plant_hash_u01(bud_hash, PLANT_CH_BUD_BREAK);
@@ -3041,14 +3135,14 @@ plant_sim_develop_axis_recursive(
 		}
 
 		/* Sympodial apical fork at axis tip:
-		 * - On deliquescent broadleaf/pine trunks (order == 0, !is_massart), the crown top bifurcates into
+		 * - On sympodial trunks (order == 0, !is_excurrent_spire), the crown top bifurcates into
 		 *   diverging codominant upper boughs rather than ending as a vertical pole.
 		 * - On tree scaffold limbs and secondary boughs (order 1 and order 2), the distal tip bifurcates
 		 *   fractally into diverging child sub-branches (order + 1). */
 		bool should_apical_fork = is_tree_arch &&
 		                          (order < g->architecture.max_branch_order) &&
 		                          (n + 1u == total_nodes) &&
-		                          ((order == 0u && !is_massart) || (order >= 1u && !is_massart));
+		                          !is_excurrent_spire;
 		if (!should_apical_fork &&
 		    order < g->architecture.max_branch_order &&
 		    n + 1u == total_nodes &&
