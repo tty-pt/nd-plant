@@ -16,6 +16,7 @@
 #include <stdint.h>
 #include <string.h>
 #include <nd/plant-types.h>
+#include <nd/plant_model.h>
 
 #define ND_PLANT_MAX   16u
 #define ND_PLANTS_SEED 5u
@@ -127,7 +128,7 @@ typedef struct {
 static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	/* 0: Pinus sylvestris (Scots pine — high bare flaky salmon-ochre trunk, irregular umbrella-domed upper pine crown) */
 	{ -36,  54, 140,  515,  2, 'x', 'X', 10, 4, 4, 1, 1, 140, "pinus sylvestris",         "pinus_sylvestris",
-	  { 52, 74, 112, 160,
+	  { 108, 162, 260, 450,
 	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_SCOTS, ND_PLANT_ACCENT_NONE, 1, 44, 58, 135, 7, 112, 0x82 },
 	    54, 48,
 	    { 54, 34, 24 }, { 124, 68, 42 }, { 196, 114, 66 },
@@ -135,7 +136,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 76, 52, 34 }, { 122, 88, 56 } } },
 	/* 1: Pseudotsuga menziesii (Douglas fir — tall monopodial spire with sweeping layered needle boughs) */
 	{  -8,  54, 240,  515,  2, 't', 'T', 10, 4, 4, 1, 1, 190, "pseudotsuga menziesii",    "pseudotsuga_menziesii",
-	  { 54, 88, 116, 196,
+	  { 120, 216, 310, 648,
 	    { ND_PLANT_FOLIAGE_CONIFER, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 52, 18, 248, 11, 138, 0x24 },
 	    45, 52,
 	    { 48, 30, 20 }, { 78, 50, 34 }, { 112, 74, 52 },
@@ -143,7 +144,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 88, 56, 34 }, { 136, 92, 58 } } },
 	/* 2: Betula pendula (Silver birch — slender twin/single chalk-white trunk with dark lenticels & pendulous airy crown) */
 	{ -28,  54, 180,  480,  2, 'x', 'X',  3, 4, 4, 1, 1, 140, "betula pendula",           "betula_pendula",
-	  { 48, 70, 96, 146,
+	  { 96, 153, 230, 396,
 	    { ND_PLANT_FOLIAGE_WEEPING, ND_PLANT_BARK_BIRCH, ND_PLANT_ACCENT_NONE, 2, 34, 34, 150, 7, 74, 0x5A },
 	    78, 58,
 	    { 42, 38, 36 }, { 184, 178, 170 }, { 238, 234, 226 },
@@ -159,7 +160,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 64, 108, 196 }, { 132, 182, 248 } } },
 	/* 4: Betula pubescens (Downy birch — multi-stemmed subarctic silver-grey birch with rounded ascending crown) */
 	{ -36,  54, 250,  515,  2, 'x', 'X',  7, 4, 4, 1, 1, 140, "betula pubescens",         "betula_pubescens",
-	  { 48, 66, 94, 134,
+	  { 90, 126, 210, 324,
 	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_BIRCH, ND_PLANT_ACCENT_NONE, 3, 36, 26, 130, 7, 82, 0x63 },
 	    84, 50,
 	    { 54, 48, 44 }, { 154, 148, 140 }, { 208, 202, 194 },
@@ -167,7 +168,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 96, 84, 38 }, { 144, 128, 64 } } },
 	/* 5: Abies alba (European silver fir — dense symmetrical pyramidal conifer with silver-backed needles & upright cones) */
 	{ -37,  36, 245,  515,  2, 'a', 'A', 10, 4, 4, 1, 2, 190, "abies alba",               "abies_alba",
-	  { 54, 84, 114, 186,
+	  { 114, 198, 288, 576,
 	    { ND_PLANT_FOLIAGE_CONIFER, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_CONE, 1, 54, 14, 252, 10, 124, 0x12 },
 	    42, 48,
 	    { 52, 50, 48 }, { 88, 86, 82 }, { 128, 126, 122 },
@@ -183,7 +184,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 204, 116, 142 }, { 248, 232, 238 } } },
 	/* 7: Acacia senegal (Gum arabic tree — forked thorny trunk supporting flat tabular savannah umbrella strata) */
 	{  65, 115,  35,  515,  1, 't', 'T', 11, 4, 4, 1, 1, 270, "acacia senegal",           "acacia_senegal",
-	  { 76, 56, 162, 112,
+	  { 144, 108, 396, 270,
 	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 38, 38, 42, 7, 106, 0xB2 },
 	    26, 56,
 	    { 62, 46, 30 }, { 102, 78, 52 }, { 146, 114, 78 },
@@ -207,7 +208,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 184, 32, 22 }, { 242, 68, 44 } } },
 	/* 10: Quercus robur (English pedunculate oak — massive buttressed bole, gnarly widespreading limbs & billowing cumulus domes) */
 	{  30,  65, 220,  460,  1, 'x', 'X', 10, 4, 4, 1, 2, 240, "quercus robur",            "quercus_robur",
-	  { 64, 68, 152, 144,
+	  { 152, 162, 450, 432,
 	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 72, 28, 58, 8, 98, 0xB2 },
 	    72, 44,
 	    { 42, 32, 24 }, { 74, 58, 44 }, { 108, 86, 66 },
@@ -215,7 +216,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 96, 74, 36 }, { 142, 114, 58 } } },
 	/* 11: Salix babylonica (Weeping willow — stout furrowed leaning trunk, high arching scaffold ribs & long golden-green curtains) */
 	{  24, 115, 240,  515,  1, 'w', 'W',  2, 4, 4, 1, 2, 240, "salix babylonica",         "salix_babylonica",
-	  { 64, 66, 144, 132,
+	  { 144, 144, 396, 360,
 	    { ND_PLANT_FOLIAGE_WEEPING, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 64, 30, 68, 8, 78, 0x7F },
 	    88, 54,
 	    { 48, 38, 28 }, { 82, 66, 50 }, { 116, 96, 74 },
@@ -223,7 +224,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 118, 148, 54 }, { 168, 204, 88 } } },
 	/* 12: Acer pseudoplatanus (Sycamore maple — straight flaking grey-brown bole with dense opposite-branched ovoid dome) */
 	{  28,  65, 250,  515,  1, 'x', 'X', 10, 4, 4, 1, 2, 240, "acer pseudoplatanus",      "acer_pseudoplatanus",
-	  { 62, 68, 138, 142,
+	  { 135, 162, 380, 432,
 	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_FISSURED, ND_PLANT_ACCENT_NONE, 1, 60, 32, 128, 8, 76, 0x41 },
 	    84, 38,
 	    { 54, 46, 38 }, { 92, 80, 68 }, { 132, 116, 102 },
@@ -231,7 +232,7 @@ static const nd_plant_spec_t s_nd_plant_specs[ND_PLANT_MAX] = {
 	    { 112, 138, 48 }, { 162, 192, 78 } } },
 	/* 13: Olea europaea (European olive — ancient twisted fluted silver-grey trunk with gnarled scaffold & silvery-sage crown) */
 	{  30, 115, 110,  515,  2, 'v', 'V',  3, 4, 4, 1, 2, 190, "olea europaea",            "olea_europaea",
-	  { 56, 52, 114, 96,
+	  { 116, 108, 315, 270,
 	    { ND_PLANT_FOLIAGE_BROADLEAF, ND_PLANT_BARK_FLUTED, ND_PLANT_ACCENT_NONE, 1, 78, 28, 45, 7, 94, 0xE2 },
 	    58, 46,
 	    { 52, 48, 42 }, { 94, 88, 78 }, { 142, 134, 122 },
